@@ -1,0 +1,19 @@
+-- Sum and average of a list of numbers
+
+ft main()
+    var numbers is [4, 8, 15, 16, 23, 42]
+    var total is 0
+
+    loop through numbers as n
+        set total to total + n
+
+    var average is total / length(numbers)
+
+    output #Total:#
+    output total
+    output #Average:#
+    output average
+
+    output #Counting 1 to 5:#
+    loop from 1 to 5 as i
+        output i

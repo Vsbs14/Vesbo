@@ -1,0 +1,9 @@
+ft main()
+    try
+        output #before error#
+        var x is 5 / 0
+        output #this should not print#
+    catch err
+        output #Caught an error:#
+        output err
+    output #after try/catch#

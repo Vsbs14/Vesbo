@@ -1,0 +1,13 @@
+global var total is 7
+
+ft main()
+    output total
+    output [10, 20][1]
+    try
+        var invalid_number is number(#12abc#)
+    catch error
+        output error
+    try
+        var invalid_index is [1, 2][0.5]
+    catch error
+        output error
