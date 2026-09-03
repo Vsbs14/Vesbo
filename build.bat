@@ -1,7 +1,7 @@
 @echo off
 setlocal
 
-set "SOURCES=src\lexer.c src\ast.c src\parser.c src\value.c src\environment.c src\builtins.c src\interpreter.c src\main.c"
+set "SOURCES=src\lexer.c src\ast.c src\parser.c src\value.c src\environment.c src\builtins.c src\interpreter.c src\bytecode.c src\codegen.c src\vm.c src\main.c"
 
 where cl >nul 2>nul
 if not errorlevel 1 goto :build_msvc
