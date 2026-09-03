@@ -1,0 +1,40 @@
+-- Basic calculator
+
+ft add(a, b)
+    return a + b
+
+ft subtract(a, b)
+    return a - b
+
+ft multiply(a, b)
+    return a * b
+
+ft divide(a, b)
+    if b equals 0
+        output #Error: cannot divide by zero#
+        return none
+    return a / b
+
+ft main()
+    var running is true
+
+    loop till running equals false
+        output #Choose an operation: add, subtract, multiply, divide, quit#
+        var choice is lowercase(trim(input()))
+
+        if choice equals #quit#
+            set running to false
+        else
+            var x is number(input())
+            var y is number(input())
+
+            if choice equals #add#
+                output add(x, y)
+            else if choice equals #subtract#
+                output subtract(x, y)
+            else if choice equals #multiply#
+                output multiply(x, y)
+            else if choice equals #divide#
+                output divide(x, y)
+            else
+                output #Unknown operation#
