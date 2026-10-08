@@ -4,6 +4,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <math.h>
+#include <time.h>
 
 static char *copy_string(const char *s) {
     size_t len = strlen(s);
@@ -440,6 +441,171 @@ static int builtin_remove_key(Value *args, int arg_count, Value *out, const char
     return 1;
 }
 
+static int builtin_read_file(Value *args, int arg_count, Value *out, const char **error) {
+    if (arg_count != 1 || args[0].type != VAL_STRING) {
+        *error = "read_file() expects exactly 1 string argument (path)";
+        return -1;
+    }
+    FILE *f = fopen(args[0].as.string, "rb");
+    if (!f) {
+        *error = "could not open file for reading";
+        return -1;
+    }
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    if (size < 0) {
+        fclose(f);
+        *error = "could not determine file size";
+        return -1;
+    }
+
+    char *buf = malloc(size + 1);
+    if (!buf) {
+        fclose(f);
+        *error = "out of memory reading file";
+        return -1;
+    }
+
+    size_t read_bytes = fread(buf, 1, size, f);
+    buf[read_bytes] = '\0';
+    fclose(f);
+
+    *out = make_string_value(buf);
+    free(buf);
+    return 1;
+}
+
+static int builtin_write_file(Value *args, int arg_count, Value *out, const char **error) {
+    if (arg_count != 2 || args[0].type != VAL_STRING) {
+        *error = "write_file() expects 2 arguments (path, content)";
+        return -1;
+    }
+    char *content;
+    int need_free = 0;
+    if (args[1].type == VAL_STRING) {
+        content = args[1].as.string;
+    } else {
+        content = value_to_display_string(args[1]);
+        need_free = 1;
+    }
+
+    FILE *f = fopen(args[0].as.string, "wb");
+    if (!f) {
+        if (need_free) free(content);
+        *error = "could not open file for writing";
+        return -1;
+    }
+
+    size_t len = strlen(content);
+    size_t written = fwrite(content, 1, len, f);
+    fclose(f);
+    if (need_free) free(content);
+
+    *out = make_bool_value(written == len);
+    return 1;
+}
+
+static int builtin_append_file(Value *args, int arg_count, Value *out, const char **error) {
+    if (arg_count != 2 || args[0].type != VAL_STRING) {
+        *error = "append_file() expects 2 arguments (path, content)";
+        return -1;
+    }
+    char *content;
+    int need_free = 0;
+    if (args[1].type == VAL_STRING) {
+        content = args[1].as.string;
+    } else {
+        content = value_to_display_string(args[1]);
+        need_free = 1;
+    }
+
+    FILE *f = fopen(args[0].as.string, "ab");
+    if (!f) {
+        if (need_free) free(content);
+        *error = "could not open file for appending";
+        return -1;
+    }
+
+    size_t len = strlen(content);
+    size_t written = fwrite(content, 1, len, f);
+    fclose(f);
+    if (need_free) free(content);
+
+    *out = make_bool_value(written == len);
+    return 1;
+}
+
+static int builtin_file_exists(Value *args, int arg_count, Value *out, const char **error) {
+    if (arg_count != 1 || args[0].type != VAL_STRING) {
+        *error = "file_exists() expects exactly 1 string argument (path)";
+        return -1;
+    }
+    FILE *f = fopen(args[0].as.string, "rb");
+    if (f) {
+        fclose(f);
+        *out = make_bool_value(1);
+    } else {
+        *out = make_bool_value(0);
+    }
+    return 1;
+}
+
+static int builtin_remove_file(Value *args, int arg_count, Value *out, const char **error) {
+    if (arg_count != 1 || args[0].type != VAL_STRING) {
+        *error = "remove_file() expects exactly 1 string argument (path)";
+        return -1;
+    }
+    int res = remove(args[0].as.string);
+    *out = make_bool_value(res == 0);
+    return 1;
+}
+
+static int builtin_system(Value *args, int arg_count, Value *out, const char **error) {
+    if (arg_count != 1 || args[0].type != VAL_STRING) {
+        *error = "system() expects exactly 1 string argument (command)";
+        return -1;
+    }
+    int code = system(args[0].as.string);
+    *out = make_number_value((double)code);
+    return 1;
+}
+
+static int builtin_env(Value *args, int arg_count, Value *out, const char **error) {
+    if (arg_count != 1 || args[0].type != VAL_STRING) {
+        *error = "env() expects exactly 1 string argument (variable name)";
+        return -1;
+    }
+    const char *val = getenv(args[0].as.string);
+    if (val) {
+        *out = make_string_value(val);
+    } else {
+        *out = make_none_value();
+    }
+    return 1;
+}
+
+static int builtin_clock(Value *args, int arg_count, Value *out, const char **error) {
+    (void)args;
+    if (arg_count != 0) {
+        *error = "clock() expects no arguments";
+        return -1;
+    }
+    *out = make_number_value((double)clock() / (double)CLOCKS_PER_SEC);
+    return 1;
+}
+
+static int builtin_time(Value *args, int arg_count, Value *out, const char **error) {
+    (void)args;
+    if (arg_count != 0) {
+        *error = "time() expects no arguments";
+        return -1;
+    }
+    *out = make_number_value((double)time(NULL));
+    return 1;
+}
+
 int is_builtin(const char *name) {
     return strcmp(name, "output") == 0 ||
            strcmp(name, "input") == 0 ||
@@ -465,7 +631,16 @@ int is_builtin(const char *name) {
            strcmp(name, "keys") == 0 ||
            strcmp(name, "values") == 0 ||
            strcmp(name, "has_key") == 0 ||
-           strcmp(name, "remove_key") == 0;
+           strcmp(name, "remove_key") == 0 ||
+           strcmp(name, "read_file") == 0 ||
+           strcmp(name, "write_file") == 0 ||
+           strcmp(name, "append_file") == 0 ||
+           strcmp(name, "file_exists") == 0 ||
+           strcmp(name, "remove_file") == 0 ||
+           strcmp(name, "system") == 0 ||
+           strcmp(name, "env") == 0 ||
+           strcmp(name, "clock") == 0 ||
+           strcmp(name, "time") == 0;
 }
 
 int call_builtin(const char *name, Value *args, int arg_count, Value *out,
@@ -495,5 +670,14 @@ int call_builtin(const char *name, Value *args, int arg_count, Value *out,
     if (strcmp(name, "values") == 0)    return builtin_values(args, arg_count, out, error_message);
     if (strcmp(name, "has_key") == 0)   return builtin_has_key(args, arg_count, out, error_message);
     if (strcmp(name, "remove_key") == 0) return builtin_remove_key(args, arg_count, out, error_message);
+    if (strcmp(name, "read_file") == 0) return builtin_read_file(args, arg_count, out, error_message);
+    if (strcmp(name, "write_file") == 0) return builtin_write_file(args, arg_count, out, error_message);
+    if (strcmp(name, "append_file") == 0) return builtin_append_file(args, arg_count, out, error_message);
+    if (strcmp(name, "file_exists") == 0) return builtin_file_exists(args, arg_count, out, error_message);
+    if (strcmp(name, "remove_file") == 0) return builtin_remove_file(args, arg_count, out, error_message);
+    if (strcmp(name, "system") == 0)    return builtin_system(args, arg_count, out, error_message);
+    if (strcmp(name, "env") == 0)       return builtin_env(args, arg_count, out, error_message);
+    if (strcmp(name, "clock") == 0)     return builtin_clock(args, arg_count, out, error_message);
+    if (strcmp(name, "time") == 0)      return builtin_time(args, arg_count, out, error_message);
     return 0; // not a built-in
 }

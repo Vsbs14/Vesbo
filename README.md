@@ -380,6 +380,17 @@ var type_name is type_of([1, 2])
   - `min(a, b)` — Smaller of two numbers
   - `max(a, b)` — Larger of two numbers
 
+- **File & System Operations:**
+  - `read_file(path)` — Read entire file contents into a string
+  - `write_file(path, content)` — Write string to a file (creates or overwrites, returns boolean)
+  - `append_file(path, content)` — Append string to a file (creates if not existing, returns boolean)
+  - `file_exists(path)` — Check if a file exists (returns boolean)
+  - `remove_file(path)` — Delete a file (returns boolean)
+  - `system(command)` — Execute a shell command and return its exit code
+  - `env(name)` — Get the value of an environment variable (or `none` if unset)
+  - `clock()` — Returns processor time in seconds for high-precision benchmarking
+  - `time()` — Returns current UNIX timestamp in seconds
+
 Arithmetic follows standard precedence (`+`, `-`, `*`, `/`, `%`). Parentheses can override it. Strings also support indexing (`str[i]`) and iteration (`loop through str as ch`). Functions can be called before their definition (forward references).
 
 ## Execution architecture

@@ -81,6 +81,21 @@ findstr /x /c:"999" "%OUTPUT%" >nul || goto :failed
 findstr /x /c:"25" "%OUTPUT%" >nul || goto :failed
 del "%OUTPUT%.vbo" >nul 2>nul
 
+REM Test File and OS built-ins in interpreter
+"%ROOT%\vesbo.exe" "%~dp0io_test.vsb" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"Hello Vesbo I/O! Extra content." "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"none" "%OUTPUT%" >nul || goto :failed
+
+REM Test File and OS built-ins in bytecode VM
+"%ROOT%\vesbo.exe" -c "%~dp0io_test.vsb" -o "%OUTPUT%.vbo" >nul 2>&1
+if errorlevel 1 goto :failed
+"%ROOT%\vesbo.exe" "%OUTPUT%.vbo" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"Hello Vesbo I/O! Extra content." "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"none" "%OUTPUT%" >nul || goto :failed
+del "%OUTPUT%.vbo" >nul 2>nul
+
 REM Test disassembler on .vsb source
 "%ROOT%\vesbo.exe" -d "%ROOT%\examples\array_loops.vsb" > "%OUTPUT%" 2>&1
 if errorlevel 1 goto :failed
