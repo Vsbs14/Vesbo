@@ -1,0 +1,41 @@
+fnc make_point(x, y)
+    return { "x": x, "y": y }
+
+fnc shift_point(p, dx)
+    set p["x"] to p["x"] + dx
+
+fnc main()
+    var m is { "a": 1, "b": 2 }
+    output m["a"]
+    output m["b"]
+
+    set m["a"] to 100
+    set m["c"] to 300
+    output m["a"]
+    output m["c"]
+    output length(m)
+
+    var arr is [10, 20, 30]
+    set arr[0] to 999
+    output arr[0]
+
+    output has_key(m, "b")
+    output has_key(m, "zzz")
+    output contains(m, "c")
+
+    var ks is keys(m)
+    output length(ks)
+
+    var vs is values(m)
+    output length(vs)
+
+    output remove_key(m, "b")
+    output has_key(m, "b")
+    output length(m)
+
+    var pt is make_point(5, 10)
+    output pt["x"]
+    output pt["y"]
+
+    shift_point(pt, 20)
+    output pt["x"]

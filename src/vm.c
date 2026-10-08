@@ -246,6 +246,41 @@ int vm_execute(VM *vm) {
                 break;
             }
 
+            case OP_BUILD_MAP: {
+                uint32_t count = read_operand(vm);
+                Value map_val = make_map_value();
+
+                if (count > 0) {
+                    Value *temp = malloc(count * 2 * sizeof(Value));
+
+                    /* Pop directly into temp from end to beginning */
+                    for (int i = (int)(count * 2) - 1; i >= 0; i--) {
+                        temp[i] = vm_pop(vm);
+                    }
+
+                    /* temp[0] is key0, temp[1] is val0, temp[2] is key1, etc. */
+                    for (uint32_t i = 0; i < count; i++) {
+                        Value key = temp[i * 2];
+                        Value val = temp[i * 2 + 1];
+                        char *kstr;
+                        int free_kstr = 0;
+                        if (key.type == VAL_STRING) {
+                            kstr = key.as.string;
+                        } else {
+                            kstr = value_to_display_string(key);
+                            free_kstr = 1;
+                        }
+                        value_map_set(map_val.as.map, kstr, val);
+                        if (free_kstr) free(kstr);
+                    }
+
+                    free(temp);
+                }
+
+                vm_push(vm, map_val);
+                break;
+            }
+
             case OP_DEFINE_LOCAL: {
                 /* Locals live directly on the value stack, at
                  * (frame base + frame-relative index). The value to define
@@ -501,8 +536,63 @@ int vm_execute(VM *vm) {
                     }
                     char ch_str[2] = { collection.as.string[(int)index.as.number], '\0' };
                     vm_push(vm, make_string_value(ch_str));
+                } else if (collection.type == VAL_MAP) {
+                    char *kstr;
+                    int free_kstr = 0;
+                    if (index.type == VAL_STRING) {
+                        kstr = index.as.string;
+                    } else {
+                        kstr = value_to_display_string(index);
+                        free_kstr = 1;
+                    }
+                    Value out_val = make_none_value();
+                    int found = value_map_get(collection.as.map, kstr, &out_val);
+                    if (free_kstr) free(kstr);
+                    if (!found) {
+                        vm_raise(vm, "key not found in map");
+                        break;
+                    }
+                    vm_push(vm, out_val);
                 } else {
                     vm_raise(vm, "cannot index a non-collection value");
+                    break;
+                }
+                break;
+            }
+
+            case OP_INDEX_SET: {
+                Value val = vm_pop(vm);
+                Value index = vm_pop(vm);
+                Value collection = vm_pop(vm);
+
+                if (collection.type == VAL_MAP) {
+                    char *kstr;
+                    int free_kstr = 0;
+                    if (index.type == VAL_STRING) {
+                        kstr = index.as.string;
+                    } else {
+                        kstr = value_to_display_string(index);
+                        free_kstr = 1;
+                    }
+                    value_map_set(collection.as.map, kstr, val);
+                    if (free_kstr) free(kstr);
+                } else if (collection.type == VAL_ARRAY) {
+                    if (index.type != VAL_NUMBER) {
+                        vm_raise(vm, "array index must be a number");
+                        break;
+                    }
+                    if (index.as.number < 0 || index.as.number >= collection.as.array.count) {
+                        vm_raise(vm, "array index out of bounds");
+                        break;
+                    }
+                    if (index.as.number != (double)(int)index.as.number) {
+                        vm_raise(vm, "array index must be an integer");
+                        break;
+                    }
+                    int idx = (int)index.as.number;
+                    collection.as.array.items[idx] = val;
+                } else {
+                    vm_raise(vm, "cannot index set on non-collection value");
                     break;
                 }
                 break;
@@ -573,6 +663,8 @@ int vm_execute(VM *vm) {
                     vm_push(vm, make_number_value((double)strlen(v.as.string)));
                 } else if (v.type == VAL_ARRAY) {
                     vm_push(vm, make_number_value((double)v.as.array.count));
+                } else if (v.type == VAL_MAP) {
+                    vm_push(vm, make_number_value((double)v.as.map->count));
                 } else {
                     vm_push(vm, make_number_value(0.0));
                 }

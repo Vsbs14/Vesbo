@@ -13,6 +13,7 @@ typedef enum {
     OP_PUSH_FALSE,
     OP_PUSH_NONE,
     OP_PUSH_ARRAY,          /* Create array: operand = element count */
+    OP_BUILD_MAP,           /* Create map: operand = entry count */
     
     /* Variables */
     OP_DEFINE_LOCAL,        /* Define local var: operand = var index */

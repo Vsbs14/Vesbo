@@ -207,6 +207,7 @@ var title is 'Hello World'
 var legacy is #Hash string#
 var enabled is true
 var values is [1, 2, 3]
+var user is { "name": "Alice", "age": 30 }
 var missing is none
 ```
 
@@ -284,17 +285,38 @@ loop through values as value
 
 ### Arrays
 
-Arrays can be created, indexed, and used in loops:
+Arrays can be created, indexed, modified, and used in loops:
 
 ```vsb
 var values is [10, 20, 30]
 var first is values[0]
+
+set values[1] to 99
 
 loop through values as value
 	output value
 ```
 
 Array indexes must be integer values.
+
+### Dictionaries / Maps
+
+Key-value maps are created using `{ key: value, ... }` syntax. Keys and values can be dynamically read and modified:
+
+```vsb
+var user is { "name": "Alice", "age": 30 }
+output user["name"]
+
+set user["age"] to 31
+set user["city"] to "New York"
+```
+
+Iterate over dictionary keys or values using `keys()` and `values()`:
+
+```vsb
+loop through keys(user) as k
+	output k + ": " + string(user[k])
+```
 
 ### Errors
 
@@ -330,21 +352,25 @@ var type_name is type_of([1, 2])
   - `input()` — Read a line of input from standard input
   - `number(x)` — Convert string or number to number
   - `string(x)` — Convert any value to its string representation
-  - `type_of(x)` — Return type name (`number`, `string`, `boolean`, `none`, `array`)
+  - `type_of(x)` — Return type name (`number`, `string`, `boolean`, `none`, `array`, `map`)
 
 - **String Operations:**
   - `lowercase(s)` — Convert string to lowercase
   - `uppercase(s)` — Convert string to uppercase
   - `trim(s)` — Trim leading and trailing whitespace
-  - `contains(collection, item)` — Check if string contains substring or array contains element
+  - `contains(collection, item)` — Check if string contains substring, array contains element, or map has key
   - `replace(s, old, new)` — Replace all occurrences of `old` with `new`
   - `split(s, delim)` — Split string into an array of substrings
   - `join(arr, delim)` — Join an array of elements with a delimiter into a string
 
-- **Array Operations:**
-  - `length(x)` — Element count of an array, or character count of a string
+- **Array & Map Operations:**
+  - `length(x)` — Element count of an array, character count of a string, or entry count of a map
   - `push(arr, value)` — Append value to array (mutates and returns array)
   - `pop(arr)` — Remove and return the last element of an array
+  - `keys(map)` — Return an array of all string keys in a map
+  - `values(map)` — Return an array of all values in a map
+  - `has_key(map, key)` — Return boolean indicating if key exists in map
+  - `remove_key(map, key)` — Remove key from map (mutates map, returns boolean)
 
 - **Math Operations:**
   - `abs(x)` — Absolute value of a number

@@ -64,6 +64,12 @@ size_t disassemble_instruction(Chunk *chunk, size_t offset) {
             return offset + 5;
         }
 
+        case OP_BUILD_MAP: {
+            uint32_t count = read_operand_at(chunk, offset + 1);
+            printf("%-20s count: %u\n", "OP_BUILD_MAP", count);
+            return offset + 5;
+        }
+
         case OP_DEFINE_LOCAL: {
             uint32_t slot = read_operand_at(chunk, offset + 1);
             printf("%-20s slot: %u\n", "OP_DEFINE_LOCAL", slot);

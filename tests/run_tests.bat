@@ -64,6 +64,23 @@ findstr /x /c:"Hello, Alice!" "%OUTPUT%" >nul || goto :failed
 findstr /x /c:"15" "%OUTPUT%" >nul || goto :failed
 del "%OUTPUT%.vbo" >nul 2>nul
 
+REM Test maps and index mutation in interpreter
+"%ROOT%\vesbo.exe" "%~dp0map_test.vsb" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"100" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"999" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"25" "%OUTPUT%" >nul || goto :failed
+
+REM Test maps and index mutation in bytecode VM
+"%ROOT%\vesbo.exe" -c "%~dp0map_test.vsb" -o "%OUTPUT%.vbo" >nul 2>&1
+if errorlevel 1 goto :failed
+"%ROOT%\vesbo.exe" "%OUTPUT%.vbo" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"100" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"999" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"25" "%OUTPUT%" >nul || goto :failed
+del "%OUTPUT%.vbo" >nul 2>nul
+
 REM Test disassembler on .vsb source
 "%ROOT%\vesbo.exe" -d "%ROOT%\examples\array_loops.vsb" > "%OUTPUT%" 2>&1
 if errorlevel 1 goto :failed

@@ -98,7 +98,11 @@ static int builtin_length(Value *args, int arg_count, Value *out, const char **e
         *out = make_number_value((double)args[0].as.array.count);
         return 1;
     }
-    *error = "length() expects a string or array argument";
+    if (args[0].type == VAL_MAP) {
+        *out = make_number_value((double)args[0].as.map->count);
+        return 1;
+    }
+    *error = "length() expects a string, array, or map argument";
     return -1;
 }
 
@@ -231,8 +235,21 @@ static int builtin_contains(Value *args, int arg_count, Value *out, const char *
         if (need_free) free(search_str);
         *out = make_bool_value(found);
         return 1;
+    } else if (args[0].type == VAL_MAP) {
+        char *kstr;
+        int need_free = 0;
+        if (args[1].type == VAL_STRING) {
+            kstr = args[1].as.string;
+        } else {
+            kstr = value_to_display_string(args[1]);
+            need_free = 1;
+        }
+        int found = value_map_has(args[0].as.map, kstr);
+        if (need_free) free(kstr);
+        *out = make_bool_value(found);
+        return 1;
     }
-    *error = "contains() first argument must be an array or string";
+    *error = "contains() first argument must be an array, map, or string";
     return -1;
 }
 
@@ -357,6 +374,72 @@ static int builtin_join(Value *args, int arg_count, Value *out, const char **err
     return 1;
 }
 
+static int builtin_keys(Value *args, int arg_count, Value *out, const char **error) {
+    if (arg_count != 1 || args[0].type != VAL_MAP) {
+        *error = "keys() expects exactly 1 map argument";
+        return -1;
+    }
+    Value arr = make_array_value();
+    ValueMap *m = args[0].as.map;
+    for (int i = 0; i < m->count; i++) {
+        value_array_push(&arr.as.array, make_string_value(m->entries[i].key));
+    }
+    *out = arr;
+    return 1;
+}
+
+static int builtin_values(Value *args, int arg_count, Value *out, const char **error) {
+    if (arg_count != 1 || args[0].type != VAL_MAP) {
+        *error = "values() expects exactly 1 map argument";
+        return -1;
+    }
+    Value arr = make_array_value();
+    ValueMap *m = args[0].as.map;
+    for (int i = 0; i < m->count; i++) {
+        value_array_push(&arr.as.array, m->entries[i].value);
+    }
+    *out = arr;
+    return 1;
+}
+
+static int builtin_has_key(Value *args, int arg_count, Value *out, const char **error) {
+    if (arg_count != 2 || args[0].type != VAL_MAP) {
+        *error = "has_key() expects exactly 2 arguments (map, key)";
+        return -1;
+    }
+    char *kstr;
+    int need_free = 0;
+    if (args[1].type == VAL_STRING) {
+        kstr = args[1].as.string;
+    } else {
+        kstr = value_to_display_string(args[1]);
+        need_free = 1;
+    }
+    int found = value_map_has(args[0].as.map, kstr);
+    if (need_free) free(kstr);
+    *out = make_bool_value(found);
+    return 1;
+}
+
+static int builtin_remove_key(Value *args, int arg_count, Value *out, const char **error) {
+    if (arg_count != 2 || args[0].type != VAL_MAP) {
+        *error = "remove_key() expects exactly 2 arguments (map, key)";
+        return -1;
+    }
+    char *kstr;
+    int need_free = 0;
+    if (args[1].type == VAL_STRING) {
+        kstr = args[1].as.string;
+    } else {
+        kstr = value_to_display_string(args[1]);
+        need_free = 1;
+    }
+    int removed = value_map_remove(args[0].as.map, kstr);
+    if (need_free) free(kstr);
+    *out = make_bool_value(removed);
+    return 1;
+}
+
 int is_builtin(const char *name) {
     return strcmp(name, "output") == 0 ||
            strcmp(name, "input") == 0 ||
@@ -378,7 +461,11 @@ int is_builtin(const char *name) {
            strcmp(name, "contains") == 0 ||
            strcmp(name, "replace") == 0 ||
            strcmp(name, "split") == 0 ||
-           strcmp(name, "join") == 0;
+           strcmp(name, "join") == 0 ||
+           strcmp(name, "keys") == 0 ||
+           strcmp(name, "values") == 0 ||
+           strcmp(name, "has_key") == 0 ||
+           strcmp(name, "remove_key") == 0;
 }
 
 int call_builtin(const char *name, Value *args, int arg_count, Value *out,
@@ -404,5 +491,9 @@ int call_builtin(const char *name, Value *args, int arg_count, Value *out,
     if (strcmp(name, "replace") == 0)   return builtin_replace(args, arg_count, out, error_message);
     if (strcmp(name, "split") == 0)     return builtin_split(args, arg_count, out, error_message);
     if (strcmp(name, "join") == 0)      return builtin_join(args, arg_count, out, error_message);
+    if (strcmp(name, "keys") == 0)      return builtin_keys(args, arg_count, out, error_message);
+    if (strcmp(name, "values") == 0)    return builtin_values(args, arg_count, out, error_message);
+    if (strcmp(name, "has_key") == 0)   return builtin_has_key(args, arg_count, out, error_message);
+    if (strcmp(name, "remove_key") == 0) return builtin_remove_key(args, arg_count, out, error_message);
     return 0; // not a built-in
-}
+}

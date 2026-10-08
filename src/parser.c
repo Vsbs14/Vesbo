@@ -98,6 +98,20 @@ static Expr *parse_primary(void) {
         consume(TOKEN_RBRACKET, "expected ']' after array elements");
         return parse_postfix(make_array_expr(elements, line), line);
     }
+    if (match(TOKEN_LBRACE)) {
+        MapEntryList entries;
+        map_entry_list_init(&entries);
+        if (!check(TOKEN_RBRACE)) {
+            do {
+                Expr *key = parse_expression();
+                consume(TOKEN_COLON, "expected ':' after map key");
+                Expr *val = parse_expression();
+                map_entry_list_add(&entries, key, val);
+            } while (match(TOKEN_COMMA));
+        }
+        consume(TOKEN_RBRACE, "expected '}' after map entries");
+        return parse_postfix(make_map_expr(entries, line), line);
+    }
     if (match(TOKEN_IDENT)) {
         char name[256];
         strncpy(name, previous_tok.lexeme, 255);
@@ -260,6 +274,13 @@ static Stmt *parse_set(void) {
     int line = current_tok.line;
     consume(TOKEN_SET, "expected 'set'");
     Token name_tok = consume(TOKEN_IDENT, "expected variable name");
+    if (match(TOKEN_LBRACKET)) {
+        Expr *index = parse_expression();
+        consume(TOKEN_RBRACKET, "expected ']' after index");
+        consume(TOKEN_TO, "expected 'to' after index in 'set' statement");
+        Expr *value = parse_expression();
+        return make_index_set_stmt(name_tok.lexeme, index, value, line);
+    }
     consume(TOKEN_TO, "expected 'to' after variable name in 'set' statement");
     Expr *value = parse_expression();
     return make_assign_stmt(name_tok.lexeme, value, line);

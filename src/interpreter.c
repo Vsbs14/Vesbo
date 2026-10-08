@@ -301,6 +301,26 @@ static Value eval_expr(Expr *expr, Environment *env, ExecResult *result) {
             return arr;
         }
 
+        case EXPR_MAP: {
+            Value map_val = make_map_value();
+            for (int i = 0; i < expr->as.map.entries.count; i++) {
+                Value k = eval_expr(expr->as.map.entries.items[i].key, env, result);
+                if (result->signal != SIGNAL_NONE) return make_none_value();
+                Value v = eval_expr(expr->as.map.entries.items[i].value, env, result);
+                if (result->signal != SIGNAL_NONE) return make_none_value();
+
+                char *kstr;
+                if (k.type == VAL_STRING) {
+                    kstr = k.as.string;
+                } else {
+                    kstr = value_to_display_string(k);
+                }
+                value_map_set(map_val.as.map, kstr, v);
+                if (k.type != VAL_STRING) free(kstr);
+            }
+            return map_val;
+        }
+
         case EXPR_INDEX: {
             Value collection = eval_expr(expr->as.index_expr.collection, env, result);
             if (result->signal != SIGNAL_NONE) return make_none_value();
@@ -339,6 +359,20 @@ static Value eval_expr(Expr *expr, Environment *env, ExecResult *result) {
                 }
                 char ch_str[2] = { collection.as.string[(int)index.as.number], '\0' };
                 return make_string_value(ch_str);
+            } else if (collection.type == VAL_MAP) {
+                char *kstr;
+                if (index.type == VAL_STRING) {
+                    kstr = index.as.string;
+                } else {
+                    kstr = value_to_display_string(index);
+                }
+                Value out_val = make_none_value();
+                int found = value_map_get(collection.as.map, kstr, &out_val);
+                if (index.type != VAL_STRING) free(kstr);
+                if (!found) {
+                    return make_none_value();
+                }
+                return out_val;
             }
 
             *result = exec_error("cannot index a non-collection value");
@@ -381,6 +415,46 @@ static ExecResult exec_stmt(Stmt *stmt, Environment *env) {
                 return exec_error(msg);
             }
             return exec_none();
+        }
+
+        case STMT_INDEX_SET: {
+            Value target;
+            if (!env_get(env, stmt->as.index_set.name, &target)) {
+                char msg[256];
+                snprintf(msg, sizeof(msg), "cannot index assign to undeclared variable '%s'", stmt->as.index_set.name);
+                return exec_error(msg);
+            }
+            Value index = eval_expr(stmt->as.index_set.index, env, &result);
+            if (result.signal != SIGNAL_NONE) return result;
+            Value val = eval_expr(stmt->as.index_set.value, env, &result);
+            if (result.signal != SIGNAL_NONE) return result;
+
+            if (target.type == VAL_MAP) {
+                char *kstr;
+                if (index.type == VAL_STRING) {
+                    kstr = index.as.string;
+                } else {
+                    kstr = value_to_display_string(index);
+                }
+                value_map_set(target.as.map, kstr, val);
+                if (index.type != VAL_STRING) free(kstr);
+                return exec_none();
+            } else if (target.type == VAL_ARRAY) {
+                if (index.type != VAL_NUMBER) {
+                    return exec_error("array index must be a number");
+                }
+                if (index.as.number < 0 || index.as.number >= target.as.array.count) {
+                    return exec_error("array index out of bounds");
+                }
+                if (index.as.number != (double)(int)index.as.number) {
+                    return exec_error("array index must be an integer");
+                }
+                int i = (int)index.as.number;
+                target.as.array.items[i] = val;
+                return exec_none();
+            } else {
+                return exec_error("cannot index set on non-collection value");
+            }
         }
 
         case STMT_IF: {
