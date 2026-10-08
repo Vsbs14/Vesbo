@@ -8,6 +8,8 @@
 #include "../include/codegen.h"
 #include "../include/vm.h"
 #include "../include/bytecode.h"
+#include "../include/disassemble.h"
+#include "../include/repl.h"
 
 #define VESBO_VERSION "0.2.0"
 
@@ -94,17 +96,22 @@ static int write_bytecode(Chunk *chunk, const char *output_path) {
 
 static void print_usage(const char *prog_name) {
     fprintf(stderr, "Vesbo %s — an English-readable programming language\n\n", VESBO_VERSION);
-    fprintf(stderr, "Usage: %s [options] <file.vsb|file.vbo>\n\n", prog_name);
+    fprintf(stderr, "Usage: %s [options] [file.vsb|file.vbo]\n\n", prog_name);
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "  -c, --compile            Compile .vsb source to .vbo bytecode\n");
     fprintf(stderr, "  -o, --output <file>      Output file (used with -c)\n");
+    fprintf(stderr, "  -d, --disassemble        Disassemble .vsb source or .vbo bytecode\n");
+    fprintf(stderr, "  -i, --repl               Start interactive REPL session\n");
     fprintf(stderr, "  -v, --version            Show version information\n");
     fprintf(stderr, "  -h, --help               Show this help message\n");
     fprintf(stderr, "\nExamples:\n");
+    fprintf(stderr, "  %s                           Start interactive REPL\n", prog_name);
     fprintf(stderr, "  %s program.vsb               Run a Vesbo source file\n", prog_name);
     fprintf(stderr, "  %s -c program.vsb             Compile to program.vbo\n", prog_name);
     fprintf(stderr, "  %s -c program.vsb -o out.vbo  Compile with custom output\n", prog_name);
     fprintf(stderr, "  %s program.vbo                Run compiled bytecode\n", prog_name);
+    fprintf(stderr, "  %s -d program.vsb             Disassemble Vesbo source\n", prog_name);
+    fprintf(stderr, "  %s -d program.vbo             Disassemble compiled bytecode\n", prog_name);
 }
 
 static Chunk *load_bytecode(const char *path) {
@@ -258,11 +265,13 @@ int main(int argc, char **argv) {
     atexit(value_cleanup);
 
     if (argc < 2) {
-        print_usage(argv[0]);
-        return 1;
+        repl_start();
+        return 0;
     }
 
     int compile_mode = 0;
+    int disassemble_mode = 0;
+    int repl_mode = 0;
     const char *source_file = NULL;
     const char *output_file = NULL;
 
@@ -274,6 +283,10 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
             print_usage(argv[0]);
             return 0;
+        } else if (strcmp(argv[i], "-i") == 0 || strcmp(argv[i], "--repl") == 0) {
+            repl_mode = 1;
+        } else if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--disassemble") == 0) {
+            disassemble_mode = 1;
         } else if (strcmp(argv[i], "-c") == 0 || strcmp(argv[i], "--compile") == 0) {
             compile_mode = 1;
         } else if (strcmp(argv[i], "-o") == 0 || strcmp(argv[i], "--output") == 0) {
@@ -292,19 +305,36 @@ int main(int argc, char **argv) {
         }
     }
 
+    if (repl_mode || (!source_file && !compile_mode && !disassemble_mode)) {
+        repl_start();
+        return 0;
+    }
+
     if (!source_file) {
+        fprintf(stderr, "Error: no input file provided\n\n");
         print_usage(argv[0]);
         return 1;
     }
 
-    /* Check if it's a bytecode file to run */
+    /* Check if it's a bytecode file */
     size_t len = strlen(source_file);
     int is_bytecode = len > 4 && strcmp(source_file + len - 4, ".vbo") == 0;
     
-    if (is_bytecode && !compile_mode) {
-        /* Load and run bytecode directly */
+    if (is_bytecode) {
         Chunk *chunk = load_bytecode(source_file);
         if (!chunk) {
+            return 1;
+        }
+        
+        if (disassemble_mode) {
+            disassemble_chunk(chunk, source_file);
+            chunk_free(chunk);
+            return 0;
+        }
+
+        if (compile_mode) {
+            fprintf(stderr, "Error: cannot compile an already compiled bytecode file\n");
+            chunk_free(chunk);
             return 1;
         }
         
@@ -335,7 +365,7 @@ int main(int argc, char **argv) {
     lexer_init(source);
     StmtList program = parse_program();
 
-    if (compile_mode) {
+    if (compile_mode || disassemble_mode) {
         /* Compile to bytecode */
         CodeGen *gen = codegen_new();
         if (!gen) {
@@ -354,7 +384,15 @@ int main(int argc, char **argv) {
             return 1;
         }
 
-        int ok = write_bytecode(chunk, output_file);
+        if (disassemble_mode) {
+            disassemble_chunk(chunk, source_file);
+        }
+
+        int ok = 1;
+        if (compile_mode) {
+            ok = write_bytecode(chunk, output_file);
+        }
+
         codegen_free(gen);
         free_stmt_list(&program);
         free(source);

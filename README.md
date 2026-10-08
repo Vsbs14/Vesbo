@@ -52,9 +52,53 @@ make
 
 Vesbo source files use the `.vsb` extension.
 
+### Interactive REPL
+
+Start an interactive read-eval-print loop by launching Vesbo with no arguments (or with `-i` / `--repl`):
+
+```sh
+./vesbo
+# or:
+./vesbo -i
+```
+
+On Windows:
+
+```bat
+vesbo.exe
+```
+
+In the REPL, expressions are automatically evaluated and displayed:
+
+```text
+Vesbo 0.2.0 Interactive REPL
+Type code to evaluate. Type 'help' for examples or 'exit' to quit.
+
+>>> 21 * 2
+42
+>>> var message is #hello world#
+>>> uppercase(message)
+HELLO WORLD
+>>> [1, 2, 3][0]
+1
+>>> ft add(a, b)
+.....     return a + b
+..... 
+>>> add(10, 32)
+42
+>>> exit
+```
+
+Features:
+- Expressions auto-print their results.
+- Variables and declared functions persist across turns.
+- Multi-line blocks (`ft`, `if`, `loop`, `try`) auto-indent until an empty line is entered.
+- Graceful error recovery: typos and parse errors will not exit the REPL.
+- Built-in `help` and `exit`/`quit` commands.
+
 ### Run source directly
 
-By default, Vesbo uses the tree-walking interpreter:
+By default, Vesbo uses the tree-walking interpreter when given a `.vsb` file:
 
 ```sh
 ./vesbo program.vsb
@@ -95,6 +139,52 @@ A different output path can be supplied with `-o` or `--output`:
 ```
 
 The same commands work with `vesbo.exe` on Windows.
+
+### Disassemble bytecode
+
+Use `-d` or `--disassemble` to inspect the compiled bytecode instructions, constant pools, and function offsets of either a source file (`.vsb`) or a compiled binary (`.vbo`):
+
+```sh
+./vesbo -d program.vsb
+./vesbo -d program.vbo
+```
+
+Example disassembly output:
+
+```text
+========================================
+ Bytecode Disassembly: examples/array_loops.vsb
+========================================
+
+-- Constant Numbers (9) --
+  [0] 4
+  [1] 8
+...
+-- Constant Strings (3) --
+  [0] "Total:"
+  [1] "Average:"
+  [2] "Counting 1 to 5:"
+
+-- Functions (1) --
+  [0] <main> (offset: 0005, params: 0)
+
+-- Instructions (264 bytes) --
+0000  OP_JUMP              -> 0257
+<main> (params: 0):
+0005  OP_PUSH_NUMBER       0 (4)
+0010  OP_PUSH_NUMBER       1 (8)
+...
+0081  OP_GET_LOCAL         slot: 3
+0086  OP_GET_LOCAL         slot: 2
+0091  OP_LENGTH           
+0092  OP_LESS_THAN        
+0093  OP_JUMP_IF_FALSE     -> 0151
+...
+0257  OP_CALL              [0] <main> (params: 0)
+0262  OP_POP              
+0263  OP_HALT             
+========================================
+```
 
 The current bytecode format begins with the `VSBX` magic header and stores the
 compiled instructions, numeric constants, string constants, and function
@@ -299,6 +389,8 @@ src/interpreter.c    Tree-walking interpreter
 src/bytecode.c       Bytecode chunk and constant-pool management
 src/codegen.c        AST -> bytecode compiler
 src/vm.c             Bytecode virtual machine
+src/disassemble.c    Bytecode disassembler and constant inspector
+src/repl.c           Interactive REPL session manager
 src/main.c           CLI, bytecode serialization, and program entry point
 ```
 
@@ -326,6 +418,8 @@ Implemented:
 - AST-to-bytecode compilation
 - Bytecode execution through a virtual machine
 - `.vbo` bytecode serialization and loading
+- Interactive REPL with expression evaluation and multiline input
+- Bytecode disassembler (`-d`, `--disassemble`) for `.vsb` and `.vbo` files
 
 The bytecode VM and compiler are now functional, but the project is not yet a
 stable language implementation. The bytecode format, runtime behavior, error

@@ -549,3 +549,46 @@ void interpret_program(StmtList program) {
     free_stmt_list(&program);
     value_cleanup();
 }
+
+void interpret_repl_program(StmtList program, Environment *env) {
+    for (int i = 0; i < program.count; i++) {
+        if (program.items[i]->type == STMT_FUNC_DECL) {
+            register_function(program.items[i]->as.func_decl.name,
+                               program.items[i]->as.func_decl.params,
+                               program.items[i]->as.func_decl.body);
+        }
+    }
+
+    for (int i = 0; i < program.count; i++) {
+        Stmt *s = program.items[i];
+        if (s->type == STMT_FUNC_DECL) continue;
+
+        if (s->type == STMT_EXPR) {
+            ExecResult r = exec_none();
+            Value v = eval_expr(s->as.expr_stmt.expr, env, &r);
+            if (r.signal == SIGNAL_ERROR) {
+                fprintf(stderr, "Runtime error: %s\n", r.error_message);
+                return;
+            }
+            if (v.type != VAL_NONE) {
+                char *disp = value_to_display_string(v);
+                printf("%s\n", disp);
+                free(disp);
+            }
+        } else {
+            ExecResult r = exec_stmt(s, env);
+            if (r.signal == SIGNAL_ERROR) {
+                fprintf(stderr, "Runtime error: %s\n", r.error_message);
+                return;
+            }
+            if (r.signal == SIGNAL_RETURN) {
+                fprintf(stderr, "Error: return is only valid inside a function.\n");
+                return;
+            }
+        }
+    }
+}
+
+void interpret_cleanup(void) {
+    clear_functions();
+}
