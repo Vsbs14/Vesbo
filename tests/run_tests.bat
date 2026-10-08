@@ -43,6 +43,27 @@ findstr /x /c:"bonono" "%OUTPUT%" >nul || goto :failed
 findstr /x /c:"Handled: division by zero" "%OUTPUT%" >nul || goto :failed
 del "%OUTPUT%.vbo" >nul 2>nul
 
+REM Test new syntax (fnc, quotes, loop while, <=) in interpreter
+"%ROOT%\vesbo.exe" "%~dp0new_syntax_test.vsb" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"hello world" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"hello single" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"hash # string" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"Hello, Alice!" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"15" "%OUTPUT%" >nul || goto :failed
+
+REM Test new syntax in bytecode VM
+"%ROOT%\vesbo.exe" -c "%~dp0new_syntax_test.vsb" -o "%OUTPUT%.vbo" >nul 2>&1
+if errorlevel 1 goto :failed
+"%ROOT%\vesbo.exe" "%OUTPUT%.vbo" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"hello world" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"hello single" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"hash # string" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"Hello, Alice!" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"15" "%OUTPUT%" >nul || goto :failed
+del "%OUTPUT%.vbo" >nul 2>nul
+
 REM Test disassembler on .vsb source
 "%ROOT%\vesbo.exe" -d "%ROOT%\examples\array_loops.vsb" > "%OUTPUT%" 2>&1
 if errorlevel 1 goto :failed

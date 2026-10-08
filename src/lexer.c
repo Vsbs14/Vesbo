@@ -115,18 +115,48 @@ static int handle_line_start(void) {
     return 0;
 }
 
-static Token string_token() {
-    // lexer.start currently points at the opening '#' (set by the
-    // caller before advance() consumed it) -- move it past that
-    // delimiter so the lexeme only contains the string's contents.
-    lexer.start = lexer.current;
-
-    while (peek() != '#' && !is_at_end()) {
-        if (peek() == '\n') lexer.line++;
-        advance();
+static Token string_token(char quote) {
+    int cap = 64;
+    int len = 0;
+    char *buf = malloc(cap);
+    if (!buf) {
+        Token t = {TOKEN_ERROR, NULL, 0, lexer.line};
+        return t;
     }
-    Token t = make_token(TOKEN_STRING);
-    if (!is_at_end()) advance(); // consume closing #
+
+    while (peek() != quote && !is_at_end()) {
+        if (peek() == '\n') lexer.line++;
+        char c = advance();
+        if (c == '\\' && !is_at_end()) {
+            char next = advance();
+            switch (next) {
+                case 'n': c = '\n'; break;
+                case 't': c = '\t'; break;
+                case 'r': c = '\r'; break;
+                case '\\': c = '\\'; break;
+                case '"': c = '"'; break;
+                case '\'': c = '\''; break;
+                case '#': c = '#'; break;
+                default:
+                    c = next;
+                    break;
+            }
+        }
+        if (len + 1 >= cap) {
+            cap *= 2;
+            buf = realloc(buf, cap);
+        }
+        buf[len++] = c;
+    }
+    buf[len] = '\0';
+    if (!is_at_end()) advance(); // consume closing quote
+
+    Token t;
+    t.type = TOKEN_STRING;
+    t.line = lexer.line;
+    t.lexeme = buf;
+    t.number_val = 0;
+    track_token_string(t.lexeme);
     return t;
 }
 
@@ -176,6 +206,7 @@ static Token handle_is_phrases() {
             int before_or_line = lexer.line;
             if (match_phrase_word("or")) {
                 if (match_phrase_word("equal")) {
+                    match_phrase_word("to");
                     return make_token(TOKEN_LESS_THAN_OR_EQUAL);
                 }
                 lexer.current = before_or;
@@ -195,6 +226,7 @@ static Token handle_is_phrases() {
             int before_or_line = lexer.line;
             if (match_phrase_word("or")) {
                 if (match_phrase_word("equal")) {
+                    match_phrase_word("to");
                     return make_token(TOKEN_GREATER_THAN_OR_EQUAL);
                 }
                 lexer.current = before_or;
@@ -238,13 +270,14 @@ static Token identifier_or_keyword_token() {
     if (len == 3 && strncmp(text, "var", 3) == 0) return make_token(TOKEN_VAR);
     if (len == 3 && strncmp(text, "set", 3) == 0) return make_token(TOKEN_SET);
     if (len == 2 && strncmp(text, "to", 2) == 0) return make_token(TOKEN_TO);
-    if (len == 2 && strncmp(text, "ft", 2) == 0) return make_token(TOKEN_FT);
+    if ((len == 3 && strncmp(text, "fnc", 3) == 0) || (len == 2 && strncmp(text, "ft", 2) == 0)) return make_token(TOKEN_FT);
     if (len == 5 && strncmp(text, "gives", 5) == 0) return make_token(TOKEN_GIVES);
     if (len == 6 && strncmp(text, "return", 6) == 0) return make_token(TOKEN_RETURN);
     if (len == 2 && strncmp(text, "if", 2) == 0) return make_token(TOKEN_IF);
     if (len == 4 && strncmp(text, "else", 4) == 0) return make_token(TOKEN_ELSE);
     if (len == 4 && strncmp(text, "loop", 4) == 0) return make_token(TOKEN_LOOP);
     if (len == 4 && strncmp(text, "till", 4) == 0) return make_token(TOKEN_TILL);
+    if (len == 5 && strncmp(text, "while", 5) == 0) return make_token(TOKEN_WHILE);
     if (len == 4 && strncmp(text, "from", 4) == 0) return make_token(TOKEN_FROM);
     if (len == 7 && strncmp(text, "through", 7) == 0) return make_token(TOKEN_THROUGH);
     if (len == 2 && strncmp(text, "as", 2) == 0) return make_token(TOKEN_AS);
@@ -305,7 +338,7 @@ Token lexer_next_token() {
 
     if (isdigit(c)) return number_token();
     if (isalpha(c) || c == '_') return identifier_or_keyword_token();
-    if (c == '#') return string_token();
+    if (c == '#' || c == '"' || c == '\'') return string_token(c);
 
     switch (c) {
         case '(': return make_token(TOKEN_LPAREN);
@@ -318,6 +351,18 @@ Token lexer_next_token() {
         case '*': return make_token(TOKEN_STAR);
         case '/': return make_token(TOKEN_SLASH);
         case '%': return make_token(TOKEN_PERCENT);
+        case '<':
+            if (peek() == '=') { advance(); return make_token(TOKEN_LESS_THAN_OR_EQUAL); }
+            return make_token(TOKEN_LESS_THAN);
+        case '>':
+            if (peek() == '=') { advance(); return make_token(TOKEN_GREATER_THAN_OR_EQUAL); }
+            return make_token(TOKEN_GREATER_THAN);
+        case '=':
+            if (peek() == '=') advance();
+            return make_token(TOKEN_EQUALS);
+        case '!':
+            if (peek() == '=') { advance(); return make_token(TOKEN_DOES_NOT_EQUAL); }
+            return make_token(TOKEN_NOT);
     }
 
     return make_token(TOKEN_ERROR);

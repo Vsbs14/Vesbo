@@ -202,11 +202,15 @@ The language currently supports numbers, strings, booleans, arrays, and
 
 ```vsb
 var count is 5
-var name is #Vesbo#
+var name is "Vesbo"
+var title is 'Hello World'
+var legacy is #Hash string#
 var enabled is true
 var values is [1, 2, 3]
 var missing is none
 ```
+
+Strings can be delimited using double quotes (`"..."`), single quotes (`'...'`), or hashes (`#...#`). Escape sequences like `\n`, `\t`, `\"`, `\'`, `\\`, and `\#` are supported.
 
 Variables can be reassigned with `set`:
 
@@ -221,18 +225,20 @@ Functions, conditionals, loops, and error handlers begin a block on the next
 line. The block is determined by indentation:
 
 ```vsb
-ft add(a, b)
+fnc add(a, b)
 	return a + b
 
-ft main()
+fnc main()
 	output add(2, 3)
 ```
+
+*(Note: `ft` is also supported as an alias for `fnc` for backwards compatibility).*
 
 `gives <type>` may follow a function's parameters as documentation. It is not
 currently enforced:
 
 ```vsb
-ft add(a, b) gives number
+fnc add(a, b) gives number
 	return a + b
 ```
 
@@ -240,22 +246,31 @@ ft add(a, b) gives number
 
 ```vsb
 if count equals 5
-	output #five#
-else if count is greater than 5
-	output #more#
+	output "five"
+else if count > 5
+	output "more"
 else
-	output #less#
+	output "less"
 ```
 
-Comparison phrases are `equals`, `does not equal`, `is less than`, `is
-greater than`, `is less than or equal`, and `is greater than or equal`.
+Comparison operators can be written in English phrases or standard symbols:
+- `equals` or `==`
+- `does not equal` or `!=`
+- `is less than` or `<`
+- `is greater than` or `>`
+- `is less than or equal` (or `is less than or equal to`) or `<=`
+- `is greater than or equal` (or `is greater than or equal to`) or `>=`
+
 Logical operators are `AND`, `OR`, and `NOT`.
 
 ### Loops
 
 ```vsb
+loop while running equals true
+	output "still running"
+
 loop till done equals true
-	output #working#
+	output "working"
 
 loop from 1 to 5 as i
 	output i
@@ -264,7 +279,8 @@ loop through values as value
 	output value
 ```
 
-`loop till` continues until its condition becomes true.
+- `loop while <cond>` continues executing as long as `<cond>` evaluates to `true`.
+- `loop till <cond>` continues executing until `<cond>` becomes `true`.
 
 ### Arrays
 
@@ -401,14 +417,14 @@ Implemented:
 - Indentation-based blocks
 - Variables and reassignment
 - Global variables
-- Functions and parameters
-- Numbers, strings, booleans, `none`, and arrays
+- Functions and parameters (`fnc` and `ft`)
+- Numbers, strings (`"..."`, `'...'`, `#...#` with escape sequences), booleans, `none`, and arrays
 - Array indexing
 - Arithmetic and operator precedence
-- Comparisons
+- Comparisons (English phrases and symbols: `<`, `<=`, `>`, `>=`, `==`, `!=`)
 - `AND`, `OR`, and `NOT`
 - Conditionals
-- `loop till`
+- `loop while` and `loop till`
 - `loop from ... as`
 - `loop through ... as`
 - Input/output
