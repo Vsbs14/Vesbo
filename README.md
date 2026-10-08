@@ -212,17 +212,43 @@ var name is input()
 var number_value is number(#42#)
 var clean_name is lowercase(trim(name))
 var item_count is length([1, 2, 3])
+var greeting is uppercase(#hello#)
+var as_str is string(123)
+var type_name is type_of([1, 2])
 ```
 
-Built-in functions are:
+#### Built-in functions:
 
-- `input()`
-- `number(x)`
-- `lowercase(x)`
-- `trim(x)`
-- `length(x)`
+- **I/O & Conversion:**
+  - `output(x)` — Print value followed by newline
+  - `input()` — Read a line of input from standard input
+  - `number(x)` — Convert string or number to number
+  - `string(x)` — Convert any value to its string representation
+  - `type_of(x)` — Return type name (`number`, `string`, `boolean`, `none`, `array`)
 
-Arithmetic follows standard precedence. Parentheses can override it.
+- **String Operations:**
+  - `lowercase(s)` — Convert string to lowercase
+  - `uppercase(s)` — Convert string to uppercase
+  - `trim(s)` — Trim leading and trailing whitespace
+  - `contains(collection, item)` — Check if string contains substring or array contains element
+  - `replace(s, old, new)` — Replace all occurrences of `old` with `new`
+  - `split(s, delim)` — Split string into an array of substrings
+  - `join(arr, delim)` — Join an array of elements with a delimiter into a string
+
+- **Array Operations:**
+  - `length(x)` — Element count of an array, or character count of a string
+  - `push(arr, value)` — Append value to array (mutates and returns array)
+  - `pop(arr)` — Remove and return the last element of an array
+
+- **Math Operations:**
+  - `abs(x)` — Absolute value of a number
+  - `round(x)` — Round number to nearest integer
+  - `floor(x)` — Largest integer less than or equal to number
+  - `ceil(x)` — Smallest integer greater than or equal to number
+  - `min(a, b)` — Smaller of two numbers
+  - `max(a, b)` — Larger of two numbers
+
+Arithmetic follows standard precedence (`+`, `-`, `*`, `/`, `%`). Parentheses can override it. Strings also support indexing (`str[i]`) and iteration (`loop through str as ch`). Functions can be called before their definition (forward references).
 
 ## Execution architecture
 

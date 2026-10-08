@@ -1,0 +1,54 @@
+-- Vesbo feature showcase
+-- Demonstrates all language features including new additions
+
+ft fizzbuzz(n)
+    if n % 3 equals 0 AND n % 5 equals 0
+        return #FizzBuzz#
+    else if n % 3 equals 0
+        return #Fizz#
+    else if n % 5 equals 0
+        return #Buzz#
+    return string(n)
+
+ft main()
+    -- Modulo and new builtins demo
+    output #=== FizzBuzz (1-15) ===#
+    loop from 1 to 15 as i
+        output fizzbuzz(i)
+
+    -- String builtins
+    output #=== String Functions ===#
+    var greeting is #  Hello, Vesbo!  #
+    output trim(greeting)
+    output uppercase(#hello world#)
+    output lowercase(#HELLO WORLD#)
+
+    -- Type checking
+    output #=== Type Checking ===#
+    output type_of(42)
+    output type_of(#hello#)
+    output type_of(true)
+    output type_of(none)
+    output type_of([1, 2, 3])
+
+    -- Dynamic arrays with push
+    output #=== Dynamic Arrays ===#
+    var items is []
+    set items to push(items, #apple#)
+    set items to push(items, #banana#)
+    set items to push(items, #cherry#)
+    output items
+    output length(items)
+
+    -- String conversion
+    output #=== String Conversion ===#
+    var num is 42
+    var msg is #The answer is: # + string(num)
+    output msg
+
+    -- Error handling
+    output #=== Error Handling ===#
+    try
+        var bad is 10 % 0
+    catch err
+        output #Caught: # + err

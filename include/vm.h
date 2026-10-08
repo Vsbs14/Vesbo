@@ -4,7 +4,7 @@
 #include "bytecode.h"
 #include "value.h"
 
-#define VM_STACK_SIZE 256
+#define VM_STACK_SIZE 4096
 #define VM_CALL_STACK_SIZE 64
 #define VM_TRY_STACK_SIZE 64
 

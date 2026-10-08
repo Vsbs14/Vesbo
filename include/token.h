@@ -28,6 +28,7 @@ typedef enum {
     TOKEN_MINUS,        // -
     TOKEN_STAR,         // *
     TOKEN_SLASH,        // /
+    TOKEN_PERCENT,      // %
 
     TOKEN_NEWLINE,
     TOKEN_INDENT,

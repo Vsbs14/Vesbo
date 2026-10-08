@@ -26,6 +26,32 @@ findstr /x /c:"before error" "%OUTPUT%" >nul || goto :failed
 findstr /x /c:"division by zero" "%OUTPUT%" >nul || goto :failed
 findstr /x /c:"after try/catch" "%OUTPUT%" >nul || goto :failed
 
+REM Test all features in tree-walking interpreter
+"%ROOT%\vesbo.exe" "%~dp0all_features_test.vsb" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"apple - banana - orange" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"bonono" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"Handled: division by zero" "%OUTPUT%" >nul || goto :failed
+
+REM Test compiling and executing all features in bytecode VM
+"%ROOT%\vesbo.exe" -c "%~dp0all_features_test.vsb" -o "%OUTPUT%.vbo" >nul 2>&1
+if errorlevel 1 goto :failed
+"%ROOT%\vesbo.exe" "%OUTPUT%.vbo" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"apple - banana - orange" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"bonono" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"Handled: division by zero" "%OUTPUT%" >nul || goto :failed
+del "%OUTPUT%.vbo" >nul 2>nul
+
+REM Test CLI flags
+"%ROOT%\vesbo.exe" --version > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /c:"Vesbo 0.2.0" "%OUTPUT%" >nul || goto :failed
+
+"%ROOT%\vesbo.exe" --help > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /c:"Usage:" "%OUTPUT%" >nul || goto :failed
+
 del "%OUTPUT%" >nul 2>nul
 echo All Vesbo smoke tests passed.
 exit /b 0

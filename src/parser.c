@@ -26,6 +26,7 @@ static int match(TokenType type) {
 static void error_at(Token *tok, const char *message) {
     fprintf(stderr, "Parse error at line %d (near '%s'): %s\n",
             tok->line, tok->lexeme ? tok->lexeme : "?", message);
+    lexer_cleanup();
     exit(1);
 }
 
@@ -140,6 +141,9 @@ static Expr *parse_multiplicative(void) {
         } else if (match(TOKEN_SLASH)) {
             Expr *right = parse_unary();
             left = make_binary_expr(BIN_DIV, left, right, line);
+        } else if (match(TOKEN_PERCENT)) {
+            Expr *right = parse_unary();
+            left = make_binary_expr(BIN_MOD, left, right, line);
         } else {
             break;
         }
@@ -395,5 +399,6 @@ StmtList parse_program(void) {
         stmt_list_add(&program, parse_statement());
     }
 
+    lexer_cleanup();
     return program;
 }

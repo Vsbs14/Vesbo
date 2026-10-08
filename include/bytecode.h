@@ -26,6 +26,7 @@ typedef enum {
     OP_SUBTRACT,
     OP_MULTIPLY,
     OP_DIVIDE,
+    OP_MODULO,
     OP_NEGATE,
     
     OP_EQUALS,
@@ -68,6 +69,11 @@ typedef enum {
     OP_LOWERCASE,
     OP_TRIM,
     OP_NUMBER_CAST,
+    OP_UPPERCASE,
+    OP_STRING_CAST,
+    OP_PUSH_BACK,
+    OP_TYPE_OF,
+    OP_CALL_BUILTIN,        /* Call builtin function: operands = string name idx, arg count */
     
     /* Pop and discard */
     OP_POP,
