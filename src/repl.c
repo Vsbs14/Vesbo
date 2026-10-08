@@ -31,7 +31,7 @@ static void print_repl_help(void) {
     printf("      >>> var count is 5\n");
     printf("      >>> set count to count + 1\n");
     printf("  - Multi-line blocks (functions, loops, conditionals):\n");
-    printf("      Type 'ft', 'if', 'loop', or 'try' to start a block.\n");
+    printf("      Type 'fnc', 'if', 'loop', or 'try' to start a block.\n");
     printf("      Indent the body lines, then press Enter on an empty line to execute.\n");
     printf("  - Special commands:\n");
     printf("      exit, quit   Exit the REPL\n");
@@ -48,6 +48,7 @@ static int is_empty_line(const char *str) {
 
 static int starts_block(const char *str) {
     while (*str && isspace((unsigned char)*str)) str++;
+    if (strncmp(str, "fnc ", 4) == 0) return 1;
     if (strncmp(str, "ft ", 3) == 0) return 1;
     if (strncmp(str, "if ", 3) == 0) return 1;
     if (strncmp(str, "else", 4) == 0) return 1;

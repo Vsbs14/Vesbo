@@ -21,6 +21,7 @@ typedef enum {
     STMT_ASSIGN,
     STMT_IF,
     STMT_LOOP_TILL,
+    STMT_LOOP_WHILE,
     STMT_LOOP_RANGE,   // loop from X to Y as i
     STMT_LOOP_THROUGH, // loop through collection as item
     STMT_FUNC_DECL,
@@ -101,6 +102,7 @@ struct Stmt {
         } if_stmt;
 
         struct { Expr *condition; StmtList body; } loop_till;
+        struct { Expr *condition; StmtList body; } loop_while;
 
         struct {
             Expr *from;
@@ -150,6 +152,7 @@ Stmt *make_var_decl_stmt(const char *name, Expr *value, int is_global, int line)
 Stmt *make_assign_stmt(const char *name, Expr *value, int line);
 Stmt *make_if_stmt(Expr *condition, StmtList then_branch, StmtList else_branch, int has_else, int line);
 Stmt *make_loop_till_stmt(Expr *condition, StmtList body, int line);
+Stmt *make_loop_while_stmt(Expr *condition, StmtList body, int line);
 Stmt *make_loop_range_stmt(Expr *from, Expr *to, const char *var_name, StmtList body, int line);
 Stmt *make_loop_through_stmt(Expr *collection, const char *item_name, StmtList body, int line);
 Stmt *make_func_decl_stmt(const char *name, StringList params, StmtList body, int line);

@@ -1,0 +1,32 @@
+-- Test new syntax features: fnc, quotes, loop while
+
+fnc greet(name)
+    return "Hello, " + name + "!"
+
+fnc add(a, b)
+    return a + b
+
+fnc main()
+    var s_double is "hello world"
+    var s_single is 'hello single'
+    var s_escaped is "line1\nline2\ttab \"quoted\""
+    var s_hash is #hash \# string#
+
+    output s_double
+    output s_single
+    output s_escaped
+    output s_hash
+    output greet("Alice")
+
+    var count is 1
+    loop while count is less than or equal to 3
+        output count
+        set count to count + 1
+
+    -- Also check loop while in bytecode VM
+    var total is 0
+    var i is 1
+    loop while i <= 5
+        set total to total + i
+        set i to i + 1
+    output total

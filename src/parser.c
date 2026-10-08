@@ -298,6 +298,12 @@ static Stmt *parse_loop(void) {
         return make_loop_till_stmt(condition, body, line);
     }
 
+    if (match(TOKEN_WHILE)) {
+        Expr *condition = parse_expression();
+        StmtList body = parse_block();
+        return make_loop_while_stmt(condition, body, line);
+    }
+
     if (match(TOKEN_FROM)) {
         Expr *from = parse_expression();
         consume(TOKEN_TO, "expected 'to' in 'loop from X to Y'");
@@ -316,13 +322,13 @@ static Stmt *parse_loop(void) {
         return make_loop_through_stmt(collection, item_tok.lexeme, body, line);
     }
 
-    error_at(&current_tok, "expected 'till', 'from', or 'through' after 'loop'");
+    error_at(&current_tok, "expected 'while', 'till', 'from', or 'through' after 'loop'");
     return NULL; // unreachable
 }
 
 static Stmt *parse_func_decl(void) {
     int line = current_tok.line;
-    consume(TOKEN_FT, "expected 'ft'");
+    consume(TOKEN_FT, "expected 'fnc' or 'ft'");
     Token name_tok = consume(TOKEN_IDENT, "expected function name");
     consume(TOKEN_LPAREN, "expected '(' after function name");
 

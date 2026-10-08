@@ -300,6 +300,26 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
             break;
         }
 
+        case STMT_LOOP_WHILE: {
+            size_t loop_start = gen->chunk->code_len;
+            codegen_expr(gen, stmt->as.loop_while.condition);
+
+            size_t jump_addr = gen->chunk->code_len;
+            chunk_write_op(gen->chunk, OP_JUMP_IF_FALSE);
+            chunk_write_operand(gen->chunk, 0); /* Placeholder */
+
+            codegen_stmt_list(gen, &stmt->as.loop_while.body);
+
+            /* Jump back to start */
+            chunk_write_op(gen->chunk, OP_JUMP);
+            chunk_write_operand(gen->chunk, (uint32_t)loop_start);
+
+            /* Patch exit jump */
+            size_t end_addr = gen->chunk->code_len;
+            chunk_patch_operand(gen->chunk, jump_addr + 1, (uint32_t)end_addr);
+            break;
+        }
+
         case STMT_LOOP_RANGE: {
             codegen_expr(gen, stmt->as.loop_range.from);
             int loop_var = local_vars_add(&gen->locals, stmt->as.loop_range.var_name);

@@ -413,6 +413,19 @@ static ExecResult exec_stmt(Stmt *stmt, Environment *env) {
             return exec_none();
         }
 
+        case STMT_LOOP_WHILE: {
+            for (;;) {
+                Value cond = eval_expr(stmt->as.loop_while.condition, env, &result);
+                if (result.signal != SIGNAL_NONE) return result;
+                if (!value_is_truthy(cond)) break;
+                env_push_scope(env);
+                ExecResult r = exec_block(stmt->as.loop_while.body, env);
+                env_pop_scope(env);
+                if (r.signal != SIGNAL_NONE) return r;
+            }
+            return exec_none();
+        }
+
         case STMT_LOOP_RANGE: {
             Value from = eval_expr(stmt->as.loop_range.from, env, &result);
             if (result.signal != SIGNAL_NONE) return result;
@@ -532,7 +545,7 @@ void interpret_program(StmtList program) {
 
     FuncDef *main_fn = find_function("main");
     if (!main_fn) {
-        fprintf(stderr, "Error: no 'ft main()' function found.\n");
+        fprintf(stderr, "Error: no 'fnc main()' function found.\n");
         exit(1);
     }
 

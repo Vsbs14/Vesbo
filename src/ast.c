@@ -166,6 +166,13 @@ Stmt *make_loop_till_stmt(Expr *condition, StmtList body, int line) {
     return s;
 }
 
+Stmt *make_loop_while_stmt(Expr *condition, StmtList body, int line) {
+    Stmt *s = alloc_stmt(STMT_LOOP_WHILE, line);
+    s->as.loop_while.condition = condition;
+    s->as.loop_while.body = body;
+    return s;
+}
+
 Stmt *make_loop_range_stmt(Expr *from, Expr *to, const char *var_name, StmtList body, int line) {
     Stmt *s = alloc_stmt(STMT_LOOP_RANGE, line);
     s->as.loop_range.from = from;
@@ -279,6 +286,10 @@ void free_stmt(Stmt *stmt) {
         case STMT_LOOP_TILL:
             free_expr(stmt->as.loop_till.condition);
             free_stmt_list(&stmt->as.loop_till.body);
+            break;
+        case STMT_LOOP_WHILE:
+            free_expr(stmt->as.loop_while.condition);
+            free_stmt_list(&stmt->as.loop_while.body);
             break;
         case STMT_LOOP_RANGE:
             free_expr(stmt->as.loop_range.from);
