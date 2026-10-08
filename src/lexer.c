@@ -16,8 +16,31 @@ typedef struct {
 } Lexer;
 
 static Lexer lexer;
+static char **token_strings = NULL;
+static int token_strings_count = 0;
+static int token_strings_cap = 0;
+
+static void track_token_string(char *s) {
+    if (!s) return;
+    if (token_strings_count >= token_strings_cap) {
+        token_strings_cap = token_strings_cap == 0 ? 64 : token_strings_cap * 2;
+        token_strings = realloc(token_strings, sizeof(char *) * token_strings_cap);
+    }
+    token_strings[token_strings_count++] = s;
+}
+
+void lexer_cleanup(void) {
+    for (int i = 0; i < token_strings_count; i++) {
+        free(token_strings[i]);
+    }
+    free(token_strings);
+    token_strings = NULL;
+    token_strings_count = 0;
+    token_strings_cap = 0;
+}
 
 void lexer_init(const char *source) {
+    lexer_cleanup();
     lexer.source = source;
     lexer.start = 0;
     lexer.current = 0;
@@ -38,8 +61,11 @@ static Token make_token(TokenType type) {
     t.line = lexer.line;
     int len = lexer.current - lexer.start;
     t.lexeme = malloc(len + 1);
-    strncpy(t.lexeme, &lexer.source[lexer.start], len);
-    t.lexeme[len] = '\0';
+    if (t.lexeme) {
+        strncpy(t.lexeme, &lexer.source[lexer.start], len);
+        t.lexeme[len] = '\0';
+        track_token_string(t.lexeme);
+    }
     return t;
 }
 
@@ -291,6 +317,7 @@ Token lexer_next_token() {
         case '-': return make_token(TOKEN_MINUS);
         case '*': return make_token(TOKEN_STAR);
         case '/': return make_token(TOKEN_SLASH);
+        case '%': return make_token(TOKEN_PERCENT);
     }
 
     return make_token(TOKEN_ERROR);

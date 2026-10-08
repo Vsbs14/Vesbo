@@ -4,6 +4,7 @@
 #include <math.h>
 #include "../include/vm.h"
 #include "../include/value.h"
+#include "../include/builtins.h"
 
 VM *vm_new(Chunk *chunk) {
     VM *vm = malloc(sizeof(VM));
@@ -66,16 +67,21 @@ void vm_free(VM *vm) {
 }
 
 void vm_push(VM *vm, Value val) {
-    if (vm->sp < VM_STACK_SIZE) {
-        vm->stack[vm->sp++] = val;
+    if (vm->sp >= VM_STACK_SIZE) {
+        fprintf(stderr, "Runtime error: stack overflow\n");
+        vm->had_error = 1;
+        return;
     }
+    vm->stack[vm->sp++] = val;
 }
 
 Value vm_pop(VM *vm) {
-    if (vm->sp > 0) {
-        return vm->stack[--vm->sp];
+    if (vm->sp <= 0) {
+        fprintf(stderr, "Runtime error: stack underflow\n");
+        vm->had_error = 1;
+        return make_none_value();
     }
-    return make_none_value();
+    return vm->stack[--vm->sp];
 }
 
 Value vm_peek(VM *vm) {
@@ -318,33 +324,18 @@ int vm_execute(VM *vm) {
                 if (left.type == VAL_NUMBER && right.type == VAL_NUMBER) {
                     vm_push(vm, make_number_value(left.as.number + right.as.number));
                 } else if (left.type == VAL_STRING || right.type == VAL_STRING) {
-                    char *lstr = NULL;
-                    char *rstr = NULL;
-                    char lbuf[64], rbuf[64];
-
-                    if (left.type == VAL_STRING) {
-                        lstr = left.as.string;
-                    } else {
-                        snprintf(lbuf, sizeof(lbuf), "%g", left.as.number);
-                        lstr = lbuf;
-                    }
-
-                    if (right.type == VAL_STRING) {
-                        rstr = right.as.string;
-                    } else {
-                        snprintf(rbuf, sizeof(rbuf), "%g", right.as.number);
-                        rstr = rbuf;
-                    }
+                    char *lstr = value_to_display_string(left);
+                    char *rstr = value_to_display_string(right);
 
                     char *result = malloc(strlen(lstr) + strlen(rstr) + 1);
                     strcpy(result, lstr);
                     strcat(result, rstr);
                     vm_push(vm, make_string_value(result));
+                    free(lstr);
+                    free(rstr);
                     free(result);
                 } else {
-                    left = to_number(left);
-                    right = to_number(right);
-                    vm_push(vm, make_number_value(left.as.number + right.as.number));
+                    vm_raise(vm, "'+' requires two numbers (or a string)");
                 }
                 break;
             }
@@ -377,6 +368,19 @@ int vm_execute(VM *vm) {
                     break;
                 }
                 vm_push(vm, make_number_value(left.as.number / right.as.number));
+                break;
+            }
+
+            case OP_MODULO: {
+                Value right = vm_pop(vm);
+                Value left = vm_pop(vm);
+                left = to_number(left);
+                right = to_number(right);
+                if (right.as.number == 0.0) {
+                    vm_raise(vm, "division by zero");
+                    break;
+                }
+                vm_push(vm, make_number_value(fmod(left.as.number, right.as.number)));
                 break;
             }
 
@@ -464,26 +468,43 @@ int vm_execute(VM *vm) {
 
             case OP_INDEX: {
                 Value index = vm_pop(vm);
-                Value array = vm_pop(vm);
+                Value collection = vm_pop(vm);
 
-                if (array.type != VAL_ARRAY) {
-                    vm_raise(vm, "cannot index a non-array value");
+                if (collection.type == VAL_ARRAY) {
+                    if (index.type != VAL_NUMBER) {
+                        vm_raise(vm, "array index must be a number");
+                        break;
+                    }
+                    if (index.as.number < 0 || index.as.number >= collection.as.array.count) {
+                        vm_raise(vm, "array index out of bounds");
+                        break;
+                    }
+                    if (index.as.number != (double)(int)index.as.number) {
+                        vm_raise(vm, "array index must be an integer");
+                        break;
+                    }
+                    int idx = (int)index.as.number;
+                    vm_push(vm, collection.as.array.items[idx]);
+                } else if (collection.type == VAL_STRING) {
+                    if (index.type != VAL_NUMBER) {
+                        vm_raise(vm, "string index must be a number");
+                        break;
+                    }
+                    size_t slen = strlen(collection.as.string);
+                    if (index.as.number < 0 || index.as.number >= slen) {
+                        vm_raise(vm, "string index out of bounds");
+                        break;
+                    }
+                    if (index.as.number != (double)(int)index.as.number) {
+                        vm_raise(vm, "string index must be an integer");
+                        break;
+                    }
+                    char ch_str[2] = { collection.as.string[(int)index.as.number], '\0' };
+                    vm_push(vm, make_string_value(ch_str));
+                } else {
+                    vm_raise(vm, "cannot index a non-collection value");
                     break;
                 }
-                if (index.type != VAL_NUMBER) {
-                    vm_raise(vm, "array index must be a number");
-                    break;
-                }
-                if (index.as.number < 0 || index.as.number >= array.as.array.count) {
-                    vm_raise(vm, "array index out of bounds");
-                    break;
-                }
-                if (index.as.number != (double)(int)index.as.number) {
-                    vm_raise(vm, "array index must be an integer");
-                    break;
-                }
-                int idx = (int)index.as.number;
-                vm_push(vm, array.as.array.items[idx]);
                 break;
             }
 
@@ -530,11 +551,14 @@ int vm_execute(VM *vm) {
             }
 
             case OP_INPUT: {
-                char buffer[256];
+                char buffer[4096];
                 if (fgets(buffer, sizeof(buffer), stdin)) {
                     size_t len = strlen(buffer);
                     if (len > 0 && buffer[len-1] == '\n') {
-                        buffer[len-1] = '\0';
+                        buffer[--len] = '\0';
+                    }
+                    if (len > 0 && buffer[len-1] == '\r') {
+                        buffer[--len] = '\0';
                     }
                     vm_push(vm, make_string_value(buffer));
                 } else {
@@ -546,9 +570,9 @@ int vm_execute(VM *vm) {
             case OP_LENGTH: {
                 Value v = vm_pop(vm);
                 if (v.type == VAL_STRING) {
-                    vm_push(vm, make_number_value(strlen(v.as.string)));
+                    vm_push(vm, make_number_value((double)strlen(v.as.string)));
                 } else if (v.type == VAL_ARRAY) {
-                    vm_push(vm, make_number_value(v.as.array.count));
+                    vm_push(vm, make_number_value((double)v.as.array.count));
                 } else {
                     vm_push(vm, make_number_value(0.0));
                 }
@@ -614,6 +638,75 @@ int vm_execute(VM *vm) {
                     break;
                 }
                 vm_push(vm, make_number_value(result));
+                break;
+            }
+
+            case OP_UPPERCASE: {
+                Value v = vm_pop(vm);
+                if (v.type == VAL_STRING) {
+                    char *result = malloc(strlen(v.as.string) + 1);
+                    strcpy(result, v.as.string);
+                    for (char *p = result; *p; p++) {
+                        if (*p >= 'a' && *p <= 'z') {
+                            *p = *p - 'a' + 'A';
+                        }
+                    }
+                    vm_push(vm, make_string_value(result));
+                    free(result);
+                } else {
+                    vm_push(vm, v);
+                }
+                break;
+            }
+
+            case OP_STRING_CAST: {
+                Value v = vm_pop(vm);
+                char *s = value_to_display_string(v);
+                vm_push(vm, make_string_value(s));
+                free(s);
+                break;
+            }
+
+            case OP_PUSH_BACK: {
+                Value val = vm_pop(vm);
+                Value arr = vm_pop(vm);
+                if (arr.type != VAL_ARRAY) {
+                    vm_raise(vm, "push() first argument must be an array");
+                    break;
+                }
+                value_array_push(&arr.as.array, val);
+                vm_push(vm, arr);
+                break;
+            }
+
+            case OP_TYPE_OF: {
+                Value v = vm_pop(vm);
+                vm_push(vm, make_string_value(value_type_name(v)));
+                break;
+            }
+
+            case OP_CALL_BUILTIN: {
+                uint32_t name_idx = read_operand(vm);
+                uint32_t arg_count = read_operand(vm);
+                const char *bname = (name_idx < vm->chunk->strings_len) ? vm->chunk->strings[name_idx] : "";
+                Value *args = NULL;
+                if (arg_count > 0) {
+                    args = malloc(arg_count * sizeof(Value));
+                    for (int i = (int)arg_count - 1; i >= 0; i--) {
+                        args[i] = vm_pop(vm);
+                    }
+                }
+                Value out;
+                const char *builtin_error = NULL;
+                int status = call_builtin(bname, args, (int)arg_count, &out, &builtin_error);
+                if (args) free(args);
+                if (status == 1) {
+                    vm_push(vm, out);
+                } else if (status == -1) {
+                    vm_raise(vm, builtin_error ? builtin_error : "builtin error");
+                } else {
+                    vm_raise(vm, "unknown builtin function");
+                }
                 break;
             }
 

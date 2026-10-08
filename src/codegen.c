@@ -2,23 +2,13 @@
 #include <string.h>
 #include <stdio.h>
 #include "../include/codegen.h"
+#include "../include/builtins.h"
 
 typedef struct {
     char **names;
     int count;
     int capacity;
 } LocalVarList;
-
-typedef struct {
-    char *name;
-    int addr;
-} FuncInfo;
-
-typedef struct {
-    FuncInfo *funcs;
-    int count;
-    int capacity;
-} FuncList;
 
 struct CodeGen {
     Chunk *chunk;
@@ -28,7 +18,6 @@ struct CodeGen {
      * local_var_base to get the real stack slot. Top-level code runs in
      * an implicit frame with base 0, so frame-relative == absolute there. */
     LocalVarList locals;
-    FuncList functions;
 };
 
 static void local_vars_init(LocalVarList *vars) {
@@ -98,12 +87,12 @@ static void codegen_expr(CodeGen *gen, Expr *expr) {
     switch (expr->type) {
         case EXPR_NUMBER:
             chunk_write_op(gen->chunk, OP_PUSH_NUMBER);
-            chunk_write_operand(gen->chunk, chunk_add_number(gen->chunk, expr->as.number_val));
+            chunk_write_operand(gen->chunk, (uint32_t)chunk_add_number(gen->chunk, expr->as.number_val));
             break;
 
         case EXPR_STRING: {
             chunk_write_op(gen->chunk, OP_PUSH_STRING);
-            chunk_write_operand(gen->chunk, chunk_add_string(gen->chunk, expr->as.string_val));
+            chunk_write_operand(gen->chunk, (uint32_t)chunk_add_string(gen->chunk, expr->as.string_val));
             break;
         }
 
@@ -123,10 +112,10 @@ static void codegen_expr(CodeGen *gen, Expr *expr) {
             int idx = local_vars_find(&gen->locals, expr->as.ident_name);
             if (idx >= 0) {
                 chunk_write_op(gen->chunk, OP_GET_LOCAL);
-                chunk_write_operand(gen->chunk, idx);
+                chunk_write_operand(gen->chunk, (uint32_t)idx);
             } else {
                 chunk_write_op(gen->chunk, OP_GET_GLOBAL);
-                chunk_write_operand(gen->chunk, chunk_add_string(gen->chunk, expr->as.ident_name));
+                chunk_write_operand(gen->chunk, (uint32_t)chunk_add_string(gen->chunk, expr->as.ident_name));
             }
             break;
         }
@@ -136,7 +125,7 @@ static void codegen_expr(CodeGen *gen, Expr *expr) {
                 codegen_expr(gen, expr->as.array.elements.items[i]);
             }
             chunk_write_op(gen->chunk, OP_PUSH_ARRAY);
-            chunk_write_operand(gen->chunk, expr->as.array.elements.count);
+            chunk_write_operand(gen->chunk, (uint32_t)expr->as.array.elements.count);
             break;
         }
 
@@ -155,6 +144,7 @@ static void codegen_expr(CodeGen *gen, Expr *expr) {
                 case BIN_SUB: chunk_write_op(gen->chunk, OP_SUBTRACT); break;
                 case BIN_MUL: chunk_write_op(gen->chunk, OP_MULTIPLY); break;
                 case BIN_DIV: chunk_write_op(gen->chunk, OP_DIVIDE); break;
+                case BIN_MOD: chunk_write_op(gen->chunk, OP_MODULO); break;
                 case BIN_EQUALS: chunk_write_op(gen->chunk, OP_EQUALS); break;
                 case BIN_NOT_EQUALS: chunk_write_op(gen->chunk, OP_NOT_EQUALS); break;
                 case BIN_LESS: chunk_write_op(gen->chunk, OP_LESS_THAN); break;
@@ -198,12 +188,24 @@ static void codegen_expr(CodeGen *gen, Expr *expr) {
                 chunk_write_op(gen->chunk, OP_TRIM);
             } else if (strcmp(name, "number") == 0) {
                 chunk_write_op(gen->chunk, OP_NUMBER_CAST);
+            } else if (strcmp(name, "uppercase") == 0) {
+                chunk_write_op(gen->chunk, OP_UPPERCASE);
+            } else if (strcmp(name, "string") == 0) {
+                chunk_write_op(gen->chunk, OP_STRING_CAST);
+            } else if (strcmp(name, "push") == 0) {
+                chunk_write_op(gen->chunk, OP_PUSH_BACK);
+            } else if (strcmp(name, "type_of") == 0) {
+                chunk_write_op(gen->chunk, OP_TYPE_OF);
+            } else if (is_builtin(name)) {
+                chunk_write_op(gen->chunk, OP_CALL_BUILTIN);
+                chunk_write_operand(gen->chunk, (uint32_t)chunk_add_string(gen->chunk, name));
+                chunk_write_operand(gen->chunk, (uint32_t)expr->as.call.args.count);
             } else {
                 /* User-defined function */
                 int func_idx = chunk_find_function(gen->chunk, name);
                 if (func_idx >= 0) {
                     chunk_write_op(gen->chunk, OP_CALL);
-                    chunk_write_operand(gen->chunk, func_idx);
+                    chunk_write_operand(gen->chunk, (uint32_t)func_idx);
                 } else {
                     /* Unknown function: keep the stack balanced */
                     chunk_write_op(gen->chunk, OP_PUSH_NONE);
@@ -222,12 +224,12 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
             codegen_expr(gen, stmt->as.var_decl.value);
             if (stmt->as.var_decl.is_global) {
                 chunk_write_op(gen->chunk, OP_SET_GLOBAL);
-                chunk_write_operand(gen->chunk, chunk_add_string(gen->chunk, stmt->as.var_decl.name));
+                chunk_write_operand(gen->chunk, (uint32_t)chunk_add_string(gen->chunk, stmt->as.var_decl.name));
                 chunk_write_op(gen->chunk, OP_POP);
             } else {
                 int idx = local_vars_add(&gen->locals, stmt->as.var_decl.name);
                 chunk_write_op(gen->chunk, OP_DEFINE_LOCAL);
-                chunk_write_operand(gen->chunk, idx);
+                chunk_write_operand(gen->chunk, (uint32_t)idx);
             }
             break;
         }
@@ -237,10 +239,10 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
             int idx = local_vars_find(&gen->locals, stmt->as.assign.name);
             if (idx >= 0) {
                 chunk_write_op(gen->chunk, OP_SET_LOCAL);
-                chunk_write_operand(gen->chunk, idx);
+                chunk_write_operand(gen->chunk, (uint32_t)idx);
             } else {
                 chunk_write_op(gen->chunk, OP_SET_GLOBAL);
-                chunk_write_operand(gen->chunk, chunk_add_string(gen->chunk, stmt->as.assign.name));
+                chunk_write_operand(gen->chunk, (uint32_t)chunk_add_string(gen->chunk, stmt->as.assign.name));
                 chunk_write_op(gen->chunk, OP_POP);
             }
             break;
@@ -302,11 +304,11 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
             codegen_expr(gen, stmt->as.loop_range.from);
             int loop_var = local_vars_add(&gen->locals, stmt->as.loop_range.var_name);
             chunk_write_op(gen->chunk, OP_DEFINE_LOCAL);
-            chunk_write_operand(gen->chunk, loop_var);
+            chunk_write_operand(gen->chunk, (uint32_t)loop_var);
 
             size_t loop_start = gen->chunk->code_len;
             chunk_write_op(gen->chunk, OP_GET_LOCAL);
-            chunk_write_operand(gen->chunk, loop_var);
+            chunk_write_operand(gen->chunk, (uint32_t)loop_var);
             codegen_expr(gen, stmt->as.loop_range.to);
             /* "loop from X to Y" is inclusive of Y (matches the tree-walking
              * interpreter and the language documentation). */
@@ -320,12 +322,12 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
 
             /* Increment loop variable */
             chunk_write_op(gen->chunk, OP_GET_LOCAL);
-            chunk_write_operand(gen->chunk, loop_var);
+            chunk_write_operand(gen->chunk, (uint32_t)loop_var);
             chunk_write_op(gen->chunk, OP_PUSH_NUMBER);
-            chunk_write_operand(gen->chunk, chunk_add_number(gen->chunk, 1.0));
+            chunk_write_operand(gen->chunk, (uint32_t)chunk_add_number(gen->chunk, 1.0));
             chunk_write_op(gen->chunk, OP_ADD);
             chunk_write_op(gen->chunk, OP_SET_LOCAL);
-            chunk_write_operand(gen->chunk, loop_var);
+            chunk_write_operand(gen->chunk, (uint32_t)loop_var);
 
             chunk_write_op(gen->chunk, OP_JUMP);
             chunk_write_operand(gen->chunk, (uint32_t)loop_start);
@@ -346,29 +348,29 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
             /* Store collection in a temporary local variable */
             int array_var = local_vars_add(&gen->locals, "__array_temp");
             chunk_write_op(gen->chunk, OP_DEFINE_LOCAL);
-            chunk_write_operand(gen->chunk, array_var);
+            chunk_write_operand(gen->chunk, (uint32_t)array_var);
 
             /* Initialize counter to 0 */
             int counter_var = local_vars_add(&gen->locals, "__counter_temp");
             chunk_write_op(gen->chunk, OP_PUSH_NUMBER);
-            chunk_write_operand(gen->chunk, chunk_add_number(gen->chunk, 0.0));
+            chunk_write_operand(gen->chunk, (uint32_t)chunk_add_number(gen->chunk, 0.0));
             chunk_write_op(gen->chunk, OP_DEFINE_LOCAL);
-            chunk_write_operand(gen->chunk, counter_var);
+            chunk_write_operand(gen->chunk, (uint32_t)counter_var);
 
             /* Add item variable */
             int item_var = local_vars_add(&gen->locals, stmt->as.loop_through.item_name);
             chunk_write_op(gen->chunk, OP_PUSH_NONE);
             chunk_write_op(gen->chunk, OP_DEFINE_LOCAL);
-            chunk_write_operand(gen->chunk, item_var);
+            chunk_write_operand(gen->chunk, (uint32_t)item_var);
 
             /* Loop start */
             size_t loop_start = gen->chunk->code_len;
 
             /* Get counter < array.length */
             chunk_write_op(gen->chunk, OP_GET_LOCAL);
-            chunk_write_operand(gen->chunk, counter_var);
+            chunk_write_operand(gen->chunk, (uint32_t)counter_var);
             chunk_write_op(gen->chunk, OP_GET_LOCAL);
-            chunk_write_operand(gen->chunk, array_var);
+            chunk_write_operand(gen->chunk, (uint32_t)array_var);
             chunk_write_op(gen->chunk, OP_LENGTH);
             chunk_write_op(gen->chunk, OP_LESS_THAN);
 
@@ -379,24 +381,24 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
 
             /* Get array[counter] and store in item variable */
             chunk_write_op(gen->chunk, OP_GET_LOCAL);
-            chunk_write_operand(gen->chunk, array_var);
+            chunk_write_operand(gen->chunk, (uint32_t)array_var);
             chunk_write_op(gen->chunk, OP_GET_LOCAL);
-            chunk_write_operand(gen->chunk, counter_var);
+            chunk_write_operand(gen->chunk, (uint32_t)counter_var);
             chunk_write_op(gen->chunk, OP_INDEX);
             chunk_write_op(gen->chunk, OP_SET_LOCAL);
-            chunk_write_operand(gen->chunk, item_var);
+            chunk_write_operand(gen->chunk, (uint32_t)item_var);
 
             /* Execute loop body */
             codegen_stmt_list(gen, &stmt->as.loop_through.body);
 
             /* Increment counter */
             chunk_write_op(gen->chunk, OP_GET_LOCAL);
-            chunk_write_operand(gen->chunk, counter_var);
+            chunk_write_operand(gen->chunk, (uint32_t)counter_var);
             chunk_write_op(gen->chunk, OP_PUSH_NUMBER);
-            chunk_write_operand(gen->chunk, chunk_add_number(gen->chunk, 1.0));
+            chunk_write_operand(gen->chunk, (uint32_t)chunk_add_number(gen->chunk, 1.0));
             chunk_write_op(gen->chunk, OP_ADD);
             chunk_write_op(gen->chunk, OP_SET_LOCAL);
-            chunk_write_operand(gen->chunk, counter_var);
+            chunk_write_operand(gen->chunk, (uint32_t)counter_var);
 
             /* Jump back to start */
             chunk_write_op(gen->chunk, OP_JUMP);
@@ -421,9 +423,15 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
             chunk_write_op(gen->chunk, OP_JUMP);
             chunk_write_operand(gen->chunk, 0); /* Placeholder */
 
-            uint32_t func_offset = gen->chunk->code_len;
-            int func_idx = chunk_add_function(gen->chunk, stmt->as.func_decl.name,
+            uint32_t func_offset = (uint32_t)gen->chunk->code_len;
+            int func_idx = chunk_find_function(gen->chunk, stmt->as.func_decl.name);
+            if (func_idx >= 0) {
+                gen->chunk->functions[func_idx].code_offset = func_offset;
+                gen->chunk->functions[func_idx].param_count = stmt->as.func_decl.params.count;
+            } else {
+                func_idx = chunk_add_function(gen->chunk, stmt->as.func_decl.name,
                                               func_offset, stmt->as.func_decl.params.count);
+            }
 
             if (func_idx >= 0) {
                 /* Save and clear local variables */
@@ -509,7 +517,7 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
              * emitting the jump-over-catch. */
             int err_idx = local_vars_add(&gen->locals, stmt->as.try_catch.error_name);
             chunk_write_op(gen->chunk, OP_DEFINE_LOCAL);
-            chunk_write_operand(gen->chunk, err_idx);
+            chunk_write_operand(gen->chunk, (uint32_t)err_idx);
 
             codegen_stmt_list(gen, &stmt->as.try_catch.catch_body);
 
@@ -538,11 +546,6 @@ CodeGen *codegen_new(void) {
     }
 
     local_vars_init(&gen->locals);
-
-    gen->functions.funcs = malloc(32 * sizeof(FuncInfo));
-    gen->functions.capacity = 32;
-    gen->functions.count = 0;
-
     return gen;
 }
 
@@ -554,17 +557,22 @@ void codegen_free(CodeGen *gen) {
     }
 
     local_vars_free(&gen->locals);
-
-    for (int i = 0; i < gen->functions.count; i++) {
-        free(gen->functions.funcs[i].name);
-    }
-    free(gen->functions.funcs);
-
     free(gen);
 }
 
 Chunk *codegen_compile(CodeGen *gen, Stmt **statements, int count) {
     local_vars_clear(&gen->locals);
+
+    /* Pre-pass: register all function declarations so forward references and recursion work */
+    for (int i = 0; i < count; i++) {
+        if (statements[i]->type == STMT_FUNC_DECL) {
+            int existing = chunk_find_function(gen->chunk, statements[i]->as.func_decl.name);
+            if (existing < 0) {
+                chunk_add_function(gen->chunk, statements[i]->as.func_decl.name, 0,
+                                   statements[i]->as.func_decl.params.count);
+            }
+        }
+    }
 
     /* Compile all statements (including function declarations, which emit
      * their bodies out-of-line and jump around them at top level) */
@@ -576,7 +584,7 @@ Chunk *codegen_compile(CodeGen *gen, Stmt **statements, int count) {
     int main_idx = chunk_find_function(gen->chunk, "main");
     if (main_idx >= 0) {
         chunk_write_op(gen->chunk, OP_CALL);
-        chunk_write_operand(gen->chunk, main_idx);
+        chunk_write_operand(gen->chunk, (uint32_t)main_idx);
         chunk_write_op(gen->chunk, OP_POP);  /* Discard return value */
     }
 

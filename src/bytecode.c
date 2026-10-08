@@ -82,10 +82,15 @@ void chunk_write_operand(Chunk *chunk, uint32_t operand) {
 }
 
 size_t chunk_add_number(Chunk *chunk, double value) {
+    for (size_t i = 0; i < chunk->numbers_len; i++) {
+        if (chunk->numbers[i] == value) {
+            return i;
+        }
+    }
     if (chunk->numbers_len >= chunk->numbers_cap) {
         chunk->numbers_cap *= 2;
         double *new_nums = realloc(chunk->numbers, chunk->numbers_cap * sizeof(double));
-        if (!new_nums) return -1;
+        if (!new_nums) return (size_t)-1;
         chunk->numbers = new_nums;
     }
     chunk->numbers[chunk->numbers_len] = value;
@@ -93,15 +98,20 @@ size_t chunk_add_number(Chunk *chunk, double value) {
 }
 
 size_t chunk_add_string(Chunk *chunk, const char *str) {
+    for (size_t i = 0; i < chunk->strings_len; i++) {
+        if (strcmp(chunk->strings[i], str) == 0) {
+            return i;
+        }
+    }
     if (chunk->strings_len >= chunk->strings_cap) {
         chunk->strings_cap *= 2;
         char **new_strs = realloc(chunk->strings, chunk->strings_cap * sizeof(char *));
-        if (!new_strs) return -1;
+        if (!new_strs) return (size_t)-1;
         chunk->strings = new_strs;
     }
     
     char *copy = malloc(strlen(str) + 1);
-    if (!copy) return -1;
+    if (!copy) return (size_t)-1;
     strcpy(copy, str);
     
     chunk->strings[chunk->strings_len] = copy;
@@ -140,17 +150,18 @@ int chunk_add_function(Chunk *chunk, const char *name, uint32_t code_offset, int
     if (!name_copy) return -1;
     strcpy(name_copy, name);
     
-    chunk->functions[chunk->functions_len].name = name_copy;
-    chunk->functions[chunk->functions_len].code_offset = code_offset;
-    chunk->functions[chunk->functions_len].param_count = param_count;
+    size_t idx = chunk->functions_len++;
+    chunk->functions[idx].name = name_copy;
+    chunk->functions[idx].code_offset = code_offset;
+    chunk->functions[idx].param_count = param_count;
     
-    return chunk->functions_len++;
+    return (int)idx;
 }
 
 int chunk_find_function(Chunk *chunk, const char *name) {
     for (size_t i = 0; i < chunk->functions_len; i++) {
         if (strcmp(chunk->functions[i].name, name) == 0) {
-            return i;
+            return (int)i;
         }
     }
     return -1;

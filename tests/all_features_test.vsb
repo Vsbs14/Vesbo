@@ -1,0 +1,72 @@
+-- Comprehensive test for all Vesbo features, builtins, and fixes
+
+ft main()
+    -- Forward function call
+    output test_forward(21)
+
+    -- Modulo operator
+    output 17 % 5
+
+    -- Math functions
+    output abs(0 - 42)
+    output round(3.7)
+    output floor(3.7)
+    output ceil(3.2)
+    output min(10, 20)
+    output max(10, 20)
+
+    -- String indexing and iteration
+    var word is #Vesbo#
+    output word[0]
+    output word[4]
+    var chars is []
+    loop through word as ch
+        set chars to push(chars, ch)
+    output chars
+
+    -- String manipulation
+    output uppercase(#vesbo#)
+    output lowercase(#VESBO#)
+    output trim(#  hello world  #)
+    output string(123)
+    output contains(#hello world#, #world#)
+    output contains(#hello world#, #xyz#)
+    output replace(#banana#, #a#, #o#)
+
+    -- Split and join
+    var parts is split(#apple,banana,orange#, #,#)
+    output parts
+    output length(parts)
+    output join(parts, # - #)
+
+    -- Array push and pop
+    var stack is [1, 2]
+    set stack to push(stack, 3)
+    output stack
+    var popped is pop(stack)
+    output popped
+    output stack
+    output contains(stack, 2)
+    output contains(stack, 99)
+
+    -- Type of
+    output type_of(42)
+    output type_of(#text#)
+    output type_of(true)
+    output type_of(none)
+    output type_of([1, 2])
+
+    -- String concatenation with various types
+    output #Count: # + 5
+    output #Status: # + true
+    output #Missing: # + none
+
+    -- Error handling with modulo by zero
+    try
+        var err_test is 10 % 0
+    catch err
+        output #Handled: # + err
+
+-- Forward-declared function
+ft test_forward(val)
+    return val * 2

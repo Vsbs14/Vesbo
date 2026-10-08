@@ -9,6 +9,8 @@
 #include "../include/vm.h"
 #include "../include/bytecode.h"
 
+#define VESBO_VERSION "0.2.0"
+
 static char *read_file(const char *path) {
     FILE *f = fopen(path, "rb");
     if (!f) {
@@ -42,59 +44,67 @@ static char *read_file(const char *path) {
     return buffer;
 }
 
-static void write_bytecode(Chunk *chunk, const char *output_path) {
+static int write_bytecode(Chunk *chunk, const char *output_path) {
     FILE *f = fopen(output_path, "wb");
     if (!f) {
         fprintf(stderr, "Could not open output file: %s\n", output_path);
-        return;
+        return 0;
     }
     
     /* Write magic header */
     fprintf(f, "VSBX");
     
     /* Write code section */
-    uint32_t code_len = chunk->code_len;
+    uint32_t code_len = (uint32_t)chunk->code_len;
     fwrite(&code_len, sizeof(uint32_t), 1, f);
     fwrite(chunk->code, 1, code_len, f);
     
     /* Write numbers section */
-    uint32_t num_count = chunk->numbers_len;
+    uint32_t num_count = (uint32_t)chunk->numbers_len;
     fwrite(&num_count, sizeof(uint32_t), 1, f);
     for (size_t i = 0; i < chunk->numbers_len; i++) {
         fwrite(&chunk->numbers[i], sizeof(double), 1, f);
     }
     
     /* Write strings section */
-    uint32_t str_count = chunk->strings_len;
+    uint32_t str_count = (uint32_t)chunk->strings_len;
     fwrite(&str_count, sizeof(uint32_t), 1, f);
     for (size_t i = 0; i < chunk->strings_len; i++) {
-        uint32_t str_len = strlen(chunk->strings[i]);
+        uint32_t str_len = (uint32_t)strlen(chunk->strings[i]);
         fwrite(&str_len, sizeof(uint32_t), 1, f);
         fwrite(chunk->strings[i], 1, str_len, f);
     }
 
-    /* Write functions section (previously omitted entirely, which meant
-     * every loaded .vbo file had no functions and could never call main) */
-    uint32_t func_count = chunk->functions_len;
+    /* Write functions section */
+    uint32_t func_count = (uint32_t)chunk->functions_len;
     fwrite(&func_count, sizeof(uint32_t), 1, f);
     for (size_t i = 0; i < chunk->functions_len; i++) {
-        uint32_t name_len = strlen(chunk->functions[i].name);
+        uint32_t name_len = (uint32_t)strlen(chunk->functions[i].name);
         fwrite(&name_len, sizeof(uint32_t), 1, f);
         fwrite(chunk->functions[i].name, 1, name_len, f);
         fwrite(&chunk->functions[i].code_offset, sizeof(uint32_t), 1, f);
-        int32_t param_count = chunk->functions[i].param_count;
+        int32_t param_count = (int32_t)chunk->functions[i].param_count;
         fwrite(&param_count, sizeof(int32_t), 1, f);
     }
 
     fclose(f);
     printf("Compiled to %s\n", output_path);
+    return 1;
 }
 
 static void print_usage(const char *prog_name) {
-    fprintf(stderr, "Usage: %s [options] <file.vsb|file.vbo>\n", prog_name);
+    fprintf(stderr, "Vesbo %s — an English-readable programming language\n\n", VESBO_VERSION);
+    fprintf(stderr, "Usage: %s [options] <file.vsb|file.vbo>\n\n", prog_name);
     fprintf(stderr, "Options:\n");
-    fprintf(stderr, "  -c, --compile <output>    Compile to bytecode file\n");
-    fprintf(stderr, "  -o <output>               Output file (with -c)\n");
+    fprintf(stderr, "  -c, --compile            Compile .vsb source to .vbo bytecode\n");
+    fprintf(stderr, "  -o, --output <file>      Output file (used with -c)\n");
+    fprintf(stderr, "  -v, --version            Show version information\n");
+    fprintf(stderr, "  -h, --help               Show this help message\n");
+    fprintf(stderr, "\nExamples:\n");
+    fprintf(stderr, "  %s program.vsb               Run a Vesbo source file\n", prog_name);
+    fprintf(stderr, "  %s -c program.vsb             Compile to program.vbo\n", prog_name);
+    fprintf(stderr, "  %s -c program.vsb -o out.vbo  Compile with custom output\n", prog_name);
+    fprintf(stderr, "  %s program.vbo                Run compiled bytecode\n", prog_name);
 }
 
 static Chunk *load_bytecode(const char *path) {
@@ -128,10 +138,11 @@ static Chunk *load_bytecode(const char *path) {
         return NULL;
     }
     
-    chunk->code = malloc(code_len);
+    free(chunk->code);
+    chunk->code = malloc(code_len > 0 ? code_len : 1);
     chunk->code_cap = code_len;
     chunk->code_len = code_len;
-    if (fread(chunk->code, 1, code_len, f) != code_len) {
+    if (code_len > 0 && fread(chunk->code, 1, code_len, f) != code_len) {
         fprintf(stderr, "Invalid bytecode file: cannot read code\n");
         chunk_free(chunk);
         fclose(f);
@@ -147,10 +158,11 @@ static Chunk *load_bytecode(const char *path) {
         return NULL;
     }
     
-    chunk->numbers = malloc(num_count * sizeof(double));
+    free(chunk->numbers);
+    chunk->numbers = malloc((num_count > 0 ? num_count : 1) * sizeof(double));
     chunk->numbers_cap = num_count;
     chunk->numbers_len = num_count;
-    if (fread(chunk->numbers, sizeof(double), num_count, f) != num_count) {
+    if (num_count > 0 && fread(chunk->numbers, sizeof(double), num_count, f) != num_count) {
         fprintf(stderr, "Invalid bytecode file: cannot read numbers\n");
         chunk_free(chunk);
         fclose(f);
@@ -166,9 +178,13 @@ static Chunk *load_bytecode(const char *path) {
         return NULL;
     }
     
-    chunk->strings = malloc(str_count * sizeof(char *));
+    for (size_t i = 0; i < chunk->strings_len; i++) {
+        free(chunk->strings[i]);
+    }
+    free(chunk->strings);
+    chunk->strings = malloc((str_count > 0 ? str_count : 1) * sizeof(char *));
     chunk->strings_cap = str_count;
-    chunk->strings_len = str_count;
+    chunk->strings_len = 0;
     
     for (uint32_t i = 0; i < str_count; i++) {
         uint32_t str_len;
@@ -188,7 +204,7 @@ static Chunk *load_bytecode(const char *path) {
             return NULL;
         }
         str[str_len] = '\0';
-        chunk->strings[i] = str;
+        chunk->strings[chunk->strings_len++] = str;
     }
 
     /* Read functions section */
@@ -252,13 +268,26 @@ int main(int argc, char **argv) {
 
     /* Parse arguments */
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-c") == 0 || strcmp(argv[i], "--compile") == 0) {
+        if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
+            printf("Vesbo %s\n", VESBO_VERSION);
+            return 0;
+        } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+            print_usage(argv[0]);
+            return 0;
+        } else if (strcmp(argv[i], "-c") == 0 || strcmp(argv[i], "--compile") == 0) {
             compile_mode = 1;
         } else if (strcmp(argv[i], "-o") == 0 || strcmp(argv[i], "--output") == 0) {
             if (i + 1 < argc) {
                 output_file = argv[++i];
+            } else {
+                fprintf(stderr, "Error: -o requires an output file argument\n");
+                return 1;
             }
-        } else if (argv[i][0] != '-') {
+        } else if (argv[i][0] == '-') {
+            fprintf(stderr, "Error: unknown option '%s'\n\n", argv[i]);
+            print_usage(argv[0]);
+            return 1;
+        } else {
             source_file = argv[i];
         }
     }
@@ -311,6 +340,7 @@ int main(int argc, char **argv) {
         CodeGen *gen = codegen_new();
         if (!gen) {
             fprintf(stderr, "Failed to create code generator\n");
+            free_stmt_list(&program);
             free(source);
             return 1;
         }
@@ -319,12 +349,16 @@ int main(int argc, char **argv) {
         if (!chunk) {
             fprintf(stderr, "Compilation failed\n");
             codegen_free(gen);
+            free_stmt_list(&program);
             free(source);
             return 1;
         }
 
-        write_bytecode(chunk, output_file);
+        int ok = write_bytecode(chunk, output_file);
         codegen_free(gen);
+        free_stmt_list(&program);
+        free(source);
+        return ok ? 0 : 1;
     } else {
         /* Interpret directly */
         interpret_program(program);

@@ -5,5 +5,6 @@
 
 void lexer_init(const char *source);
 Token lexer_next_token(void);
+void lexer_cleanup(void);
 
 #endif

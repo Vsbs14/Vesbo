@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 typedef struct {
     char *name;
@@ -153,6 +154,17 @@ static Value eval_binary(Expr *expr, Environment *env, ExecResult *result) {
             }
             return make_number_value(left.as.number / right.as.number);
 
+        case BIN_MOD:
+            if (left.type != VAL_NUMBER || right.type != VAL_NUMBER) {
+                *result = exec_error("'%' requires two numbers");
+                return make_none_value();
+            }
+            if (right.as.number == 0) {
+                *result = exec_error("division by zero");
+                return make_none_value();
+            }
+            return make_number_value(fmod(left.as.number, right.as.number));
+
         case BIN_EQUALS:
             return make_bool_value(values_equal(left, right));
         case BIN_NOT_EQUALS:
@@ -295,25 +307,42 @@ static Value eval_expr(Expr *expr, Environment *env, ExecResult *result) {
             Value index = eval_expr(expr->as.index_expr.index, env, result);
             if (result->signal != SIGNAL_NONE) return make_none_value();
 
-            if (collection.type != VAL_ARRAY) {
-                *result = exec_error("cannot index a non-array value");
-                return make_none_value();
+            if (collection.type == VAL_ARRAY) {
+                if (index.type != VAL_NUMBER) {
+                    *result = exec_error("array index must be a number");
+                    return make_none_value();
+                }
+                if (index.as.number < 0 ||
+                    index.as.number >= collection.as.array.count) {
+                    *result = exec_error("array index out of bounds");
+                    return make_none_value();
+                }
+                if (index.as.number != (double)(int)index.as.number) {
+                    *result = exec_error("array index must be an integer");
+                    return make_none_value();
+                }
+                int i = (int)index.as.number;
+                return collection.as.array.items[i];
+            } else if (collection.type == VAL_STRING) {
+                if (index.type != VAL_NUMBER) {
+                    *result = exec_error("string index must be a number");
+                    return make_none_value();
+                }
+                size_t slen = strlen(collection.as.string);
+                if (index.as.number < 0 || index.as.number >= slen) {
+                    *result = exec_error("string index out of bounds");
+                    return make_none_value();
+                }
+                if (index.as.number != (double)(int)index.as.number) {
+                    *result = exec_error("string index must be an integer");
+                    return make_none_value();
+                }
+                char ch_str[2] = { collection.as.string[(int)index.as.number], '\0' };
+                return make_string_value(ch_str);
             }
-            if (index.type != VAL_NUMBER) {
-                *result = exec_error("array index must be a number");
-                return make_none_value();
-            }
-            if (index.as.number < 0 ||
-                index.as.number >= collection.as.array.count) {
-                *result = exec_error("array index out of bounds");
-                return make_none_value();
-            }
-            if (index.as.number != (double)(int)index.as.number) {
-                *result = exec_error("array index must be an integer");
-                return make_none_value();
-            }
-            int i = (int)index.as.number;
-            return collection.as.array.items[i];
+
+            *result = exec_error("cannot index a non-collection value");
+            return make_none_value();
         }
 
         case EXPR_BINARY: return eval_binary(expr, env, result);
@@ -405,15 +434,26 @@ static ExecResult exec_stmt(Stmt *stmt, Environment *env) {
         case STMT_LOOP_THROUGH: {
             Value collection = eval_expr(stmt->as.loop_through.collection, env, &result);
             if (result.signal != SIGNAL_NONE) return result;
-            if (collection.type != VAL_ARRAY) {
-                return exec_error("'loop through' requires an array");
-            }
-            for (int i = 0; i < collection.as.array.count; i++) {
-                env_push_scope(env);
-                env_declare(env, stmt->as.loop_through.item_name, collection.as.array.items[i], 0);
-                ExecResult r = exec_block(stmt->as.loop_through.body, env);
-                env_pop_scope(env);
-                if (r.signal != SIGNAL_NONE) return r;
+            if (collection.type == VAL_ARRAY) {
+                for (int i = 0; i < collection.as.array.count; i++) {
+                    env_push_scope(env);
+                    env_declare(env, stmt->as.loop_through.item_name, collection.as.array.items[i], 0);
+                    ExecResult r = exec_block(stmt->as.loop_through.body, env);
+                    env_pop_scope(env);
+                    if (r.signal != SIGNAL_NONE) return r;
+                }
+            } else if (collection.type == VAL_STRING) {
+                size_t slen = strlen(collection.as.string);
+                for (size_t i = 0; i < slen; i++) {
+                    char ch_str[2] = { collection.as.string[i], '\0' };
+                    env_push_scope(env);
+                    env_declare(env, stmt->as.loop_through.item_name, make_string_value(ch_str), 0);
+                    ExecResult r = exec_block(stmt->as.loop_through.body, env);
+                    env_pop_scope(env);
+                    if (r.signal != SIGNAL_NONE) return r;
+                }
+            } else {
+                return exec_error("'loop through' requires an array or string");
             }
             return exec_none();
         }

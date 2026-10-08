@@ -31,7 +31,7 @@ typedef enum {
 } StmtType;
 
 typedef enum {
-    BIN_ADD, BIN_SUB, BIN_MUL, BIN_DIV,
+    BIN_ADD, BIN_SUB, BIN_MUL, BIN_DIV, BIN_MOD,
     BIN_EQUALS, BIN_NOT_EQUALS,
     BIN_LESS, BIN_LESS_EQUAL,
     BIN_GREATER, BIN_GREATER_EQUAL,
