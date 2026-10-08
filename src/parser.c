@@ -7,6 +7,11 @@
 
 static Token current_tok;
 static Token previous_tok;
+static jmp_buf *repl_recovery_buf = NULL;
+
+void parser_set_repl_mode(jmp_buf *buf) {
+    repl_recovery_buf = buf;
+}
 
 static void parser_advance(void) {
     previous_tok = current_tok;
@@ -27,6 +32,9 @@ static void error_at(Token *tok, const char *message) {
     fprintf(stderr, "Parse error at line %d (near '%s'): %s\n",
             tok->line, tok->lexeme ? tok->lexeme : "?", message);
     lexer_cleanup();
+    if (repl_recovery_buf) {
+        longjmp(*repl_recovery_buf, 1);
+    }
     exit(1);
 }
 

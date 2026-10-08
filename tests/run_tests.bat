@@ -43,6 +43,27 @@ findstr /x /c:"bonono" "%OUTPUT%" >nul || goto :failed
 findstr /x /c:"Handled: division by zero" "%OUTPUT%" >nul || goto :failed
 del "%OUTPUT%.vbo" >nul 2>nul
 
+REM Test disassembler on .vsb source
+"%ROOT%\vesbo.exe" -d "%ROOT%\examples\array_loops.vsb" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /c:"Bytecode Disassembly" "%OUTPUT%" >nul || goto :failed
+findstr /c:"OP_PUSH_ARRAY" "%OUTPUT%" >nul || goto :failed
+findstr /c:"OP_HALT" "%OUTPUT%" >nul || goto :failed
+
+REM Test disassembler on .vbo bytecode
+"%ROOT%\vesbo.exe" -c "%ROOT%\examples\array_loops.vsb" -o "%OUTPUT%.vbo" >nul 2>&1
+if errorlevel 1 goto :failed
+"%ROOT%\vesbo.exe" -d "%OUTPUT%.vbo" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /c:"Bytecode Disassembly" "%OUTPUT%" >nul || goto :failed
+findstr /c:"OP_PUSH_ARRAY" "%OUTPUT%" >nul || goto :failed
+del "%OUTPUT%.vbo" >nul 2>nul
+
+REM Test REPL expression evaluation via pipe
+echo 21 * 2 | "%ROOT%\vesbo.exe" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"42" "%OUTPUT%" >nul || goto :failed
+
 REM Test CLI flags
 "%ROOT%\vesbo.exe" --version > "%OUTPUT%" 2>&1
 if errorlevel 1 goto :failed
@@ -51,6 +72,8 @@ findstr /c:"Vesbo 0.2.0" "%OUTPUT%" >nul || goto :failed
 "%ROOT%\vesbo.exe" --help > "%OUTPUT%" 2>&1
 if errorlevel 1 goto :failed
 findstr /c:"Usage:" "%OUTPUT%" >nul || goto :failed
+findstr /c:"--disassemble" "%OUTPUT%" >nul || goto :failed
+findstr /c:"--repl" "%OUTPUT%" >nul || goto :failed
 
 del "%OUTPUT%" >nul 2>nul
 echo All Vesbo smoke tests passed.
