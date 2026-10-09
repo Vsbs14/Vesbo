@@ -1,7 +1,7 @@
 @echo off
 setlocal
 
-set "SOURCES=src\lexer.c src\ast.c src\parser.c src\value.c src\environment.c src\builtins.c src\module.c src\interpreter.c src\bytecode.c src\codegen.c src\vm.c src\disassemble.c src\repl.c src\main.c"
+set "SOURCES=src\lexer.c src\ast.c src\parser.c src\value.c src\environment.c src\builtins.c src\raylib_bindings.c src\module.c src\interpreter.c src\bytecode.c src\codegen.c src\vm.c src\disassemble.c src\repl.c src\main.c"
 
 where cl >nul 2>nul
 if not errorlevel 1 goto :build_msvc
@@ -35,20 +35,20 @@ echo Install Visual Studio Build Tools, MinGW-w64, or LLVM Clang.
 exit /b 1
 
 :build_msvc
-cl /nologo /W4 /D_CRT_SECURE_NO_WARNINGS /Iinclude /Fe:vesbo.exe %SOURCES%
+cl /MD /nologo /W4 /D_CRT_SECURE_NO_WARNINGS /Iinclude /Ivendor\raylib\include /Fe:vesbo.exe %SOURCES% /link /LIBPATH:vendor\raylib\lib raylib.lib user32.lib gdi32.lib winmm.lib shell32.lib
 if errorlevel 1 exit /b 1
 del *.obj >nul 2>nul
-echo Built vesbo.exe with MSVC.
+echo Built vesbo.exe with MSVC and Raylib.
 exit /b 0
 
 :build_gcc
-gcc -Wall -Wextra -Iinclude -o vesbo.exe %SOURCES%
+gcc -Wall -Wextra -Iinclude -Ivendor/raylib/include -o vesbo.exe %SOURCES% -Lvendor/raylib/lib -lraylib -lopengl32 -lgdi32 -lwinmm
 if errorlevel 1 exit /b 1
-echo Built vesbo.exe with GCC.
+echo Built vesbo.exe with GCC and Raylib.
 exit /b 0
 
 :build_clang
-clang -Wall -Wextra -Iinclude -o vesbo.exe %SOURCES%
+clang -Wall -Wextra -Iinclude -Ivendor/raylib/include -o vesbo.exe %SOURCES% -Lvendor/raylib/lib -lraylib -lopengl32 -lgdi32 -lwinmm
 if errorlevel 1 exit /b 1
-echo Built vesbo.exe with Clang.
+echo Built vesbo.exe with Clang and Raylib.
 exit /b 0

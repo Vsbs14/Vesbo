@@ -479,6 +479,38 @@ var type_name is type_of([1, 2])
   - `clock()` — Returns processor time in seconds for high-precision benchmarking
   - `time()` — Returns current UNIX timestamp in seconds
 
+- **2D Game & Graphics Operations (Raylib):**
+  - **Window & System:**
+    - `rl_init_window(width, height, title)` — Initialize window and OpenGL graphics context
+    - `rl_close_window()` — Close window and unload OpenGL context
+    - `rl_window_should_close()` — Check if application close was requested (Esc / Close button)
+    - `rl_set_target_fps(fps)` — Set target frame rate (e.g. 60)
+    - `rl_get_fps()` — Get current framerate
+    - `rl_get_frame_time()` — Get delta time in seconds for the last frame
+    - `rl_get_screen_width()` / `rl_get_screen_height()` — Screen dimensions
+    - `rl_set_window_title(title)` — Update window title bar
+  - **Drawing & Lifecycle:**
+    - `rl_begin_drawing()` / `rl_end_drawing()` — Frame render delimiters
+    - `rl_clear_background(color)` — Clear canvas to color (string name, hex `#RRGGBB`, or `[r, g, b, a]`)
+    - `rl_draw_rectangle(x, y, w, h, color)` — Draw filled rectangle
+    - `rl_draw_rectangle_lines(x, y, w, h, color)` — Draw rectangle outline
+    - `rl_draw_rectangle_rounded(x, y, w, h, roundness, segments, color)` — Draw rounded rectangle
+    - `rl_draw_circle(cx, cy, radius, color)` — Draw filled circle
+    - `rl_draw_circle_lines(cx, cy, radius, color)` — Draw circle outline
+    - `rl_draw_line(x1, y1, x2, y2, color)` — Draw line
+    - `rl_draw_text(text, x, y, font_size, color)` — Draw text
+    - `rl_measure_text(text, font_size)` — Measure text width in pixels
+  - **Input:**
+    - `rl_is_key_down(key)` / `rl_is_key_pressed(key)` / `rl_is_key_released(key)` — Keyboard queries (e.g. `"left"`, `"right"`, `"space"`, `"r"`, `"a"`, `"d"`, etc.)
+    - `rl_get_mouse_x()` / `rl_get_mouse_y()` — Mouse cursor coordinates
+    - `rl_is_mouse_button_down(btn)` / `rl_is_mouse_button_pressed(btn)` — Mouse click queries (`"left"`, `"right"`, `"middle"`)
+  - **Collisions & Math:**
+    - `rl_check_collision_recs(x1, y1, w1, h1, x2, y2, w2, h2)` — AABB rectangle collision
+    - `rl_check_collision_circle_rec(cx, cy, radius, rx, ry, rw, rh)` — Circle to rectangle collision
+    - `rl_check_collision_circles(x1, y1, r1, x2, y2, r2)` — Circle to circle collision
+    - `rl_get_random_value(min, max)` — Random integer in range `[min, max]`
+    - `rl_color(r, g, b, [a])` / `rl_fade(color, alpha)` — Color constructors and fading helper
+
 Arithmetic follows standard precedence (`+`, `-`, `*`, `/`, `%`). Parentheses can override it. Strings also support indexing (`str[i]`) and iteration (`loop through str as ch`). Functions can be called before their definition (forward references).
 
 ## Execution architecture
@@ -515,6 +547,7 @@ can be loaded and executed without the original `.vsb` source.
 
 ```text
 include/   Public C interfaces and data structures
+games/    Full games written in pure Vesbo (Breakout, etc.)
 src/       Lexer, parser, AST, runtime, bytecode compiler, VM, and CLI
 examples/  Vesbo programs and compiled bytecode examples
 tests/     Regression program and Windows smoke-test runner
@@ -523,16 +556,18 @@ tests/     Regression program and Windows smoke-test runner
 Important source files include:
 
 ```text
-src/lexer.c          Tokenization
-src/parser.c         Source -> AST
-src/ast.c            AST structures and management
-src/interpreter.c    Tree-walking interpreter
-src/bytecode.c       Bytecode chunk and constant-pool management
-src/codegen.c        AST -> bytecode compiler
-src/vm.c             Bytecode virtual machine
-src/disassemble.c    Bytecode disassembler and constant inspector
-src/repl.c           Interactive REPL session manager
-src/main.c           CLI, bytecode serialization, and program entry point
+src/lexer.c            Tokenization
+src/parser.c           Source -> AST
+src/ast.c              AST structures and management
+src/interpreter.c      Tree-walking interpreter
+src/builtins.c         Core language built-ins
+src/raylib_bindings.c  Raylib 2D engine bindings (window, drawing, input, collisions)
+src/bytecode.c         Bytecode chunk and constant-pool management
+src/codegen.c          AST -> bytecode compiler
+src/vm.c               Bytecode virtual machine
+src/disassemble.c      Bytecode disassembler and constant inspector
+src/repl.c             Interactive REPL session manager
+src/main.c             CLI, bytecode serialization, and program entry point
 ```
 
 ## Current status
@@ -554,6 +589,7 @@ Implemented:
 - `loop through ... as`
 - Input/output
 - Built-in functions
+- Raylib 6.0 2D game loop, rendering, input, and collision built-ins
 - `try`/`catch` runtime error handling
 - Tree-walking interpretation
 - AST-to-bytecode compilation
@@ -569,7 +605,24 @@ handling, and language semantics may change as development continues.
 Native code generation is a possible future direction, but it is **not
 currently implemented**.
 
-## Examples
+## Examples & Games
+
+### Games
+
+Play Breakout written entirely in pure Vesbo:
+
+```bat
+vesbo.exe games\breakout\breakout.vsb
+```
+
+Or compile and run as bytecode:
+
+```bat
+vesbo.exe -c games\breakout\breakout.vsb -o games\breakout\breakout.vbo
+vesbo.exe games\breakout\breakout.vbo
+```
+
+### Examples
 
 The repository includes several example programs:
 

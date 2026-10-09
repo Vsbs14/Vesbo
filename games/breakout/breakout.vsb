@@ -1,0 +1,238 @@
+-- Vesbo Breakout
+-- A 2D Brick Breaker game written in pure Vesbo with Raylib bindings
+
+fnc create_bricks()
+    var list is []
+    var start_x is 24
+    var start_y is 65
+    var brick_w is 68
+    var brick_h is 20
+    var pad_x is 8
+    var pad_y is 8
+
+    loop from 0 to 4 as r
+        var row_color is "red"
+        var row_pts is 50
+        if r == 1
+            set row_color to "orange"
+            set row_pts to 40
+        else if r == 2
+            set row_color to "gold"
+            set row_pts to 30
+        else if r == 3
+            set row_color to "lime"
+            set row_pts to 20
+        else if r == 4
+            set row_color to "sky_blue"
+            set row_pts to 10
+
+        loop from 0 to 9 as c
+            var bx is start_x + c * (brick_w + pad_x)
+            var by is start_y + r * (brick_h + pad_y)
+            var b is { "x": bx, "y": by, "w": brick_w, "h": brick_h, "alive": true, "color": row_color, "pts": row_pts }
+            set list to push(list, b)
+    return list
+
+fnc main()
+    rl_init_window(800, 600, "Vesbo Breakout")
+    rl_set_target_fps(60)
+
+    output ""
+    output "=========================================================="
+    output "  VESBO BREAKOUT IS RUNNING!"
+    output "  The game window (800x600) is open on your desktop."
+    output "  (Click 'Vesbo Breakout' in your Windows taskbar if hidden)"
+    output ""
+    output "  CONTROLS:"
+    output "  - Press SPACE to launch the ball from your paddle"
+    output "  - Left / Right arrows or A / D to steer paddle"
+    output "  - Press R to restart, ESC to quit"
+    output "=========================================================="
+    output ""
+
+    -- Paddle state
+    var paddle_w is 100
+    var paddle_h is 16
+    var paddle_x is 350
+    var paddle_y is 550
+    var paddle_speed is 520
+
+    -- Ball state
+    var ball_radius is 7
+    var ball_x is 400
+    var ball_y is 530
+    var ball_vx is 220
+    var ball_vy is -320
+    var ball_attached is true
+
+    -- Game state
+    var score is 0
+    var lives is 3
+    var game_over is false
+    var victory is false
+    var bricks is create_bricks()
+    var bricks_left is 50
+
+    -- Particles list
+    var particles is []
+
+    loop while not rl_window_should_close()
+        var dt is rl_get_frame_time()
+        if dt > 0.05
+            set dt to 0.05
+
+        -- Restart on R
+        if rl_is_key_pressed("r")
+            set paddle_x to 350
+            set ball_attached to true
+            set ball_vx to 220
+            set ball_vy to -320
+            set score to 0
+            set lives to 3
+            set game_over to false
+            set victory to false
+            set bricks to create_bricks()
+            set bricks_left to 50
+            set particles to []
+
+        if not game_over and not victory
+            -- Paddle movement
+            if rl_is_key_down("left") or rl_is_key_down("a")
+                set paddle_x to paddle_x - paddle_speed * dt
+            if rl_is_key_down("right") or rl_is_key_down("d")
+                set paddle_x to paddle_x + paddle_speed * dt
+
+            if paddle_x < 20
+                set paddle_x to 20
+            if paddle_x + paddle_w > 780
+                set paddle_x to 780 - paddle_w
+
+            -- Ball logic
+            if ball_attached
+                set ball_x to paddle_x + paddle_w / 2
+                set ball_y to paddle_y - ball_radius - 2
+                if rl_is_key_pressed("space")
+                    set ball_attached to false
+                    set ball_vx to 220
+                    set ball_vy to -320
+            else
+                set ball_x to ball_x + ball_vx * dt
+                set ball_y to ball_y + ball_vy * dt
+
+                -- Left / Right wall bounce
+                if ball_x - ball_radius <= 20
+                    set ball_x to 20 + ball_radius
+                    set ball_vx to abs(ball_vx)
+                if ball_x + ball_radius >= 780
+                    set ball_x to 780 - ball_radius
+                    set ball_vx to -abs(ball_vx)
+
+                -- Top wall bounce
+                if ball_y - ball_radius <= 40
+                    set ball_y to 40 + ball_radius
+                    set ball_vy to abs(ball_vy)
+
+                -- Bottom wall (Life lost)
+                if ball_y > 600
+                    set lives to lives - 1
+                    if lives <= 0
+                        set game_over to true
+                    else
+                        set ball_attached to true
+
+                -- Paddle bounce with directional angle
+                if ball_y + ball_radius >= paddle_y and ball_y - ball_radius <= paddle_y + paddle_h
+                    if ball_x + ball_radius >= paddle_x and ball_x - ball_radius <= paddle_x + paddle_w
+                        if ball_vy > 0
+                            set ball_y to paddle_y - ball_radius
+                            var center is paddle_x + paddle_w / 2
+                            var hit_ratio is (ball_x - center) / (paddle_w / 2)
+                            set ball_vx to hit_ratio * 360
+                            set ball_vy to -abs(ball_vy)
+
+                -- Bricks collision
+                loop through bricks as b
+                    if b["alive"]
+                        if rl_check_collision_circle_rec(ball_x, ball_y, ball_radius, b["x"], b["y"], b["w"], b["h"])
+                            set b["alive"] to false
+                            set score to score + b["pts"]
+                            set bricks_left to bricks_left - 1
+
+                            -- Bounce logic
+                            if ball_y < b["y"] or ball_y > b["y"] + b["h"]
+                                set ball_vy to -ball_vy
+                            else
+                                set ball_vx to -ball_vx
+
+                            -- Spawn spark particles
+                            loop from 0 to 5 as p_idx
+                                var r_vx is rl_get_random_value(-140, 140)
+                                var r_vy is rl_get_random_value(-140, 140)
+                                var part is { "x": b["x"] + b["w"] / 2, "y": b["y"] + b["h"] / 2, "vx": r_vx, "vy": r_vy, "life": 0.45, "color": b["color"] }
+                                set particles to push(particles, part)
+
+                            if bricks_left <= 0
+                                set victory to true
+
+        -- Particle simulation & prune dead
+        var active_particles is []
+        loop through particles as p
+            if p["life"] > 0
+                set p["x"] to p["x"] + p["vx"] * dt
+                set p["y"] to p["y"] + p["vy"] * dt
+                set p["life"] to p["life"] - dt
+                if length(active_particles) < 40
+                    set active_particles to push(active_particles, p)
+        set particles to active_particles
+
+        -- Render frame
+        rl_begin_drawing()
+        rl_clear_background("#12121e")
+
+        -- Header & Borders
+        rl_draw_rectangle(0, 0, 800, 40, "#1c1c2e")
+        rl_draw_line(20, 40, 20, 600, "gray")
+        rl_draw_line(780, 40, 780, 600, "gray")
+
+        -- HUD
+        rl_draw_text($"SCORE: {score}", 30, 11, 20, "gold")
+        rl_draw_text($"LIVES: {lives}", 220, 11, 20, "red")
+        rl_draw_text($"BRICKS: {bricks_left}", 390, 11, 20, "lime")
+        rl_draw_text($"FPS: {rl_get_fps()}", 700, 12, 18, "light_gray")
+
+        -- Draw Bricks
+        loop through bricks as b
+            if b["alive"]
+                rl_draw_rectangle(b["x"], b["y"], b["w"], b["h"], b["color"])
+                rl_draw_rectangle_lines(b["x"], b["y"], b["w"], b["h"], "#12121e")
+
+        -- Draw Particles
+        loop through particles as p
+            if p["life"] > 0
+                rl_draw_rectangle(p["x"], p["y"], 3, 3, p["color"])
+
+        -- Draw Paddle & Ball
+        rl_draw_rectangle(paddle_x, paddle_y, paddle_w, paddle_h, "white")
+        rl_draw_circle(ball_x, ball_y, ball_radius, "yellow")
+
+        -- Overlays
+        if ball_attached and not game_over and not victory
+            rl_draw_text("PRESS SPACE TO LAUNCH", 265, 380, 20, "yellow")
+
+        if game_over
+            rl_draw_rectangle(200, 220, 400, 160, "#000000")
+            rl_draw_rectangle_lines(200, 220, 400, 160, "red")
+            rl_draw_text("GAME OVER", 310, 245, 36, "red")
+            rl_draw_text($"FINAL SCORE: {score}", 325, 298, 20, "white")
+            rl_draw_text("PRESS 'R' TO RESTART", 295, 335, 18, "gold")
+
+        if victory
+            rl_draw_rectangle(200, 220, 400, 160, "#000000")
+            rl_draw_rectangle_lines(200, 220, 400, 160, "lime")
+            rl_draw_text("VICTORY!", 330, 245, 36, "lime")
+            rl_draw_text($"FINAL SCORE: {score}", 325, 298, 20, "white")
+            rl_draw_text("PRESS 'R' TO PLAY AGAIN", 275, 335, 18, "gold")
+
+        rl_end_drawing()
+
+    rl_close_window()

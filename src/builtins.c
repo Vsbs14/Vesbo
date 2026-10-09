@@ -1,4 +1,5 @@
 #include "../include/builtins.h"
+#include "../include/raylib_bindings.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -607,6 +608,7 @@ static int builtin_time(Value *args, int arg_count, Value *out, const char **err
 }
 
 int is_builtin(const char *name) {
+    if (is_raylib_builtin(name)) return 1;
     return strcmp(name, "output") == 0 ||
            strcmp(name, "input") == 0 ||
            strcmp(name, "number") == 0 ||
@@ -645,6 +647,9 @@ int is_builtin(const char *name) {
 
 int call_builtin(const char *name, Value *args, int arg_count, Value *out,
                  const char **error_message) {
+    if (is_raylib_builtin(name)) {
+        return call_raylib_builtin(name, args, arg_count, out, error_message);
+    }
     if (strcmp(name, "output") == 0)    return builtin_output(args, arg_count, out, error_message);
     if (strcmp(name, "input") == 0)     return builtin_input(args, arg_count, out, error_message);
     if (strcmp(name, "number") == 0)    return builtin_number(args, arg_count, out, error_message);
