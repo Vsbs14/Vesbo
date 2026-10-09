@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-OUTPUT="$(mktemp "/tmp/vesbo-tests-XXXXXX.txt")"
+OUTPUT="$(mktemp "${TMPDIR:-/tmp}/vesbo-tests-XXXXXX")"
 VBO_FILE="${OUTPUT}.vbo"
 
 cleanup() {
@@ -11,8 +11,19 @@ cleanup() {
 }
 trap cleanup EXIT
 
+CURRENT_TEST="initialization"
+set_test() {
+    CURRENT_TEST="$1"
+}
+
 failed() {
-    echo "Vesbo smoke tests failed." >&2
+    local ec=$?
+    echo "Vesbo smoke tests failed at: $CURRENT_TEST (exit code: $ec)" >&2
+    if [ -f "$OUTPUT" ]; then
+        echo "--- Last Output ---" >&2
+        cat "$OUTPUT" >&2
+        echo "-------------------" >&2
+    fi
     exit 1
 }
 
@@ -161,10 +172,12 @@ grep -Fq "OP_PUSH_ARRAY" "$OUTPUT" || failed
 rm -f "$VBO_FILE"
 
 # Test 22: REPL expression evaluation via pipe
+set_test "Test 22: REPL pipe evaluation"
 echo "21 * 2" | ./vesbo > "$OUTPUT" 2>&1 || failed
 grep -Fxq "42" "$OUTPUT" || failed
 
 # Test 23: CLI flags
+set_test "Test 23: CLI flags"
 ./vesbo --version > "$OUTPUT" 2>&1 || failed
 grep -Fq "Vesbo 0.2.0" "$OUTPUT" || failed
 
@@ -172,6 +185,45 @@ grep -Fq "Vesbo 0.2.0" "$OUTPUT" || failed
 grep -Fq "Usage:" "$OUTPUT" || failed
 grep -Fq -e "--disassemble" "$OUTPUT" || failed
 grep -Fq -e "--repl" "$OUTPUT" || failed
+
+# Test 24: Bare module imports in interpreter and bytecode VM
+set_test "Test 24: Bare module import interpreter"
+./vesbo tests/bare_import_test.vsb > "$OUTPUT" 2>&1 || failed
+grep -Fxq "300" "$OUTPUT" || failed
+grep -Fxq "bare import success" "$OUTPUT" || failed
+
+set_test "Test 24: Bare module import bytecode VM"
+./vesbo -c tests/bare_import_test.vsb -o "$VBO_FILE" > /dev/null 2>&1 || failed
+./vesbo "$VBO_FILE" > "$OUTPUT" 2>&1 || failed
+grep -Fxq "300" "$OUTPUT" || failed
+grep -Fxq "bare import success" "$OUTPUT" || failed
+rm -f "$VBO_FILE"
+
+# Test 25: Full showcase example in interpreter and bytecode VM
+set_test "Test 25: Showcase example interpreter"
+./vesbo examples/showcase.vsb > "$OUTPUT" 2>&1 || failed
+grep -Fxq "FizzBuzz" "$OUTPUT" || failed
+grep -Fxq "Hello, Vesbo!" "$OUTPUT" || failed
+grep -Fxq "The answer is: 42" "$OUTPUT" || failed
+
+set_test "Test 25: Showcase example bytecode VM"
+./vesbo -c examples/showcase.vsb -o "$VBO_FILE" > /dev/null 2>&1 || failed
+./vesbo "$VBO_FILE" > "$OUTPUT" 2>&1 || failed
+grep -Fxq "FizzBuzz" "$OUTPUT" || failed
+grep -Fxq "Hello, Vesbo!" "$OUTPUT" || failed
+grep -Fxq "The answer is: 42" "$OUTPUT" || failed
+rm -f "$VBO_FILE"
+
+# Test 26: Calculator example in interpreter and bytecode VM
+set_test "Test 26: Calculator example interpreter"
+printf "add\n10\n5\nquit\n" | ./vesbo examples/calculator.vsb > "$OUTPUT" 2>&1 || failed
+grep -Fxq "15" "$OUTPUT" || failed
+
+set_test "Test 26: Calculator example bytecode VM"
+./vesbo -c examples/calculator.vsb -o "$VBO_FILE" > /dev/null 2>&1 || failed
+printf "add\n10\n5\nquit\n" | ./vesbo "$VBO_FILE" > "$OUTPUT" 2>&1 || failed
+grep -Fxq "15" "$OUTPUT" || failed
+rm -f "$VBO_FILE"
 
 echo "All Vesbo smoke tests passed."
 exit 0

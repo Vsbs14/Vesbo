@@ -11,6 +11,20 @@ Vesbo currently has **two execution paths**:
 
 The language and runtime are still under active development.
 
+## Quick Start
+
+| Task | Windows | Linux / macOS |
+| :--- | :--- | :--- |
+| **Build (default)** | `build.bat` | `make` |
+| **Build without Raylib** | `build.bat --no-raylib` | `make NO_RAYLIB=1` |
+| **Run tests** | `tests\run_tests.bat` | `./tests/run_tests.sh` |
+| **Run script (.vsb)** | `vesbo.exe script.vsb` | `./vesbo script.vsb` |
+| **Compile to bytecode** | `vesbo.exe -c script.vsb -o out.vbo` | `./vesbo -c script.vsb -o out.vbo` |
+| **Run bytecode (.vbo)** | `vesbo.exe out.vbo` | `./vesbo out.vbo` |
+| **Interactive REPL** | `vesbo.exe` | `./vesbo` |
+| **Disassemble** | `vesbo.exe -d script.vsb` | `./vesbo -d script.vsb` |
+| **Play Breakout game** | `games\breakout\run.bat` | `./games/breakout/run.sh` |
+
 ## Build & Installation
 
 ### Windows
@@ -89,6 +103,20 @@ make NO_RAYLIB=1
 ## Running Vesbo
 
 Vesbo source files use the `.vsb` extension.
+
+### CLI Options Reference
+
+| Flag | Long Option | Description | Example |
+| :--- | :--- | :--- | :--- |
+| *(none)* | *(none)* | Launch interactive REPL session | `./vesbo` |
+| `<file.vsb>` | *(none)* | Execute `.vsb` source with tree-walking interpreter | `./vesbo program.vsb` |
+| `<file.vbo>` | *(none)* | Execute compiled `.vbo` bytecode with stack VM | `./vesbo program.vbo` |
+| `-c` | `--compile` | Compile `.vsb` source into `.vbo` bytecode file | `./vesbo -c program.vsb` |
+| `-o <file>` | `--output <file>` | Specify output bytecode file path (with `-c`) | `./vesbo -c program.vsb -o out.vbo` |
+| `-d` | `--disassemble` | Disassemble `.vsb` source or `.vbo` bytecode chunk | `./vesbo -d program.vsb` |
+| `-i` | `--repl` | Launch interactive REPL session explicitly | `./vesbo -i` |
+| `-v` | `--version` | Display Vesbo version | `./vesbo -v` |
+| `-h` | `--help` | Display help and usage message | `./vesbo -h` |
 
 ### Interactive REPL
 

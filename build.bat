@@ -3,7 +3,11 @@ setlocal
 
 set "SOURCES=src\lexer.c src\ast.c src\parser.c src\value.c src\environment.c src\builtins.c src\raylib_bindings.c src\module.c src\interpreter.c src\bytecode.c src\codegen.c src\vm.c src\disassemble.c src\repl.c src\main.c"
 
-if "%1"=="--no-raylib" set NO_RAYLIB=1
+for %%a in (%*) do (
+    if /i "%%~a"=="--no-raylib" set NO_RAYLIB=1
+    if /i "%%~a"=="/no-raylib" set NO_RAYLIB=1
+    if /i "%%~a"=="-no-raylib" set NO_RAYLIB=1
+)
 
 where cl >nul 2>nul
 if not errorlevel 1 goto :build_msvc

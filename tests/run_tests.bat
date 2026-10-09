@@ -188,6 +188,38 @@ findstr /c:"Usage:" "%OUTPUT%" >nul || goto :failed
 findstr /c:"--disassemble" "%OUTPUT%" >nul || goto :failed
 findstr /c:"--repl" "%OUTPUT%" >nul || goto :failed
 
+REM Test Bare module imports in interpreter
+"%ROOT%\vesbo.exe" "%~dp0bare_import_test.vsb" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"300" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"bare import success" "%OUTPUT%" >nul || goto :failed
+
+REM Test Bare module imports in bytecode VM
+"%ROOT%\vesbo.exe" -c "%~dp0bare_import_test.vsb" -o "%OUTPUT%.vbo" >nul 2>&1
+if errorlevel 1 goto :failed
+"%ROOT%\vesbo.exe" "%OUTPUT%.vbo" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"300" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"bare import success" "%OUTPUT%" >nul || goto :failed
+del "%OUTPUT%.vbo" >nul 2>nul
+
+REM Test Showcase example in interpreter
+"%ROOT%\vesbo.exe" "%ROOT%\examples\showcase.vsb" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"FizzBuzz" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"Hello, Vesbo!" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"The answer is: 42" "%OUTPUT%" >nul || goto :failed
+
+REM Test Showcase example in bytecode VM
+"%ROOT%\vesbo.exe" -c "%ROOT%\examples\showcase.vsb" -o "%OUTPUT%.vbo" >nul 2>&1
+if errorlevel 1 goto :failed
+"%ROOT%\vesbo.exe" "%OUTPUT%.vbo" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"FizzBuzz" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"Hello, Vesbo!" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"The answer is: 42" "%OUTPUT%" >nul || goto :failed
+del "%OUTPUT%.vbo" >nul 2>nul
+
 del "%OUTPUT%" >nul 2>nul
 echo All Vesbo smoke tests passed.
 exit /b 0
