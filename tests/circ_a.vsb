@@ -1,0 +1,6 @@
+import "circ_b.vsb"
+
+fnc ping(n)
+    if n <= 0
+        return "ping-done"
+    return pong(n - 1)

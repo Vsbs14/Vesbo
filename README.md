@@ -243,6 +243,25 @@ fnc add(a, b) gives number
 	return a + b
 ```
 
+### Modules and `import`
+
+Split programs across multiple files and reuse functions and constants with `import`:
+
+```vsb
+import "math_utils.vsb"
+import "geometry"
+import helpers
+
+fnc main()
+	output add(10, 20)
+	output calculate_area(5)
+```
+
+- **Path Resolution**: Relative paths are resolved first relative to the importing file's directory, then relative to the current working directory. The `.vsb` extension is optional.
+- **Cycle Detection**: Circular imports and diamond dependencies are automatically detected and deduplicated.
+- **Entry Points**: Standalone `fnc main()` definitions in imported library files are ignored, preserving the caller application's entry point.
+- **Self-Contained Bytecode**: When compiling to bytecode (`-c`), all imported modules are statically compiled into the single `.vbo` binary. The resulting bytecode executable has no external file dependencies at runtime.
+
 ### Conditions
 
 ```vsb

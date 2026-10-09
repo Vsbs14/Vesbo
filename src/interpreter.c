@@ -2,6 +2,7 @@
 #include "../include/environment.h"
 #include "../include/value.h"
 #include "../include/builtins.h"
+#include "../include/module.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -387,6 +388,73 @@ static Value eval_expr(Expr *expr, Environment *env, ExecResult *result) {
     return make_none_value();
 }
 
+static ExecResult exec_stmt(Stmt *stmt, Environment *env);
+
+static ExecResult exec_import_file(const char *raw_path, Environment *env) {
+    char *resolved = module_resolve_path(raw_path, module_get_current_file());
+    if (!resolved) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "cannot find module '%s'", raw_path);
+        return exec_error(msg);
+    }
+
+    if (module_is_imported(resolved)) {
+        free(resolved);
+        return exec_none();
+    }
+    module_mark_imported(resolved);
+
+    StmtList mod_stmts;
+    char *err = NULL;
+    const char *prev_file = module_get_current_file();
+    module_set_current_file(resolved);
+
+    if (!module_parse_file(resolved, &mod_stmts, &err)) {
+        module_set_current_file(prev_file);
+        char msg[256];
+        snprintf(msg, sizeof(msg), "error importing '%s': %s", raw_path, err ? err : "parse error");
+        if (err) free(err);
+        free(resolved);
+        return exec_error(msg);
+    }
+
+    /* 1. Register functions in imported module (skip 'main' to prevent overriding entry point) */
+    for (int i = 0; i < mod_stmts.count; i++) {
+        if (mod_stmts.items[i]->type == STMT_IMPORT) {
+            ExecResult r = exec_import_file(mod_stmts.items[i]->as.import_stmt.path, env);
+            if (r.signal != SIGNAL_NONE) {
+                module_set_current_file(prev_file);
+                free_stmt_list(&mod_stmts);
+                free(resolved);
+                return r;
+            }
+        } else if (mod_stmts.items[i]->type == STMT_FUNC_DECL) {
+            if (strcmp(mod_stmts.items[i]->as.func_decl.name, "main") != 0) {
+                register_function(mod_stmts.items[i]->as.func_decl.name,
+                                  mod_stmts.items[i]->as.func_decl.params,
+                                  mod_stmts.items[i]->as.func_decl.body);
+            }
+        }
+    }
+
+    /* 2. Execute top-level initialization statements in imported module */
+    for (int i = 0; i < mod_stmts.count; i++) {
+        if (mod_stmts.items[i]->type != STMT_FUNC_DECL && mod_stmts.items[i]->type != STMT_IMPORT) {
+            ExecResult r = exec_stmt(mod_stmts.items[i], env);
+            if (r.signal != SIGNAL_NONE) {
+                module_set_current_file(prev_file);
+                free_stmt_list(&mod_stmts);
+                free(resolved);
+                return r;
+            }
+        }
+    }
+
+    module_set_current_file(prev_file);
+    free(resolved);
+    return exec_none();
+}
+
 static ExecResult exec_block(StmtList block, Environment *env) {
     for (int i = 0; i < block.count; i++) {
         ExecResult r = exec_stmt(block.items[i], env);
@@ -456,6 +524,9 @@ static ExecResult exec_stmt(Stmt *stmt, Environment *env) {
                 return exec_error("cannot index set on non-collection value");
             }
         }
+
+        case STMT_IMPORT:
+            return exec_import_file(stmt->as.import_stmt.path, env);
 
         case STMT_IF: {
             Value cond = eval_expr(stmt->as.if_stmt.condition, env, &result);
@@ -596,7 +667,13 @@ void interpret_program(StmtList program) {
     env_init(&env);
 
     for (int i = 0; i < program.count; i++) {
-        if (program.items[i]->type == STMT_FUNC_DECL) {
+        if (program.items[i]->type == STMT_IMPORT) {
+            ExecResult top_result = exec_stmt(program.items[i], &env);
+            if (top_result.signal == SIGNAL_ERROR) {
+                fprintf(stderr, "Uncaught error: %s\n", top_result.error_message);
+                exit(1);
+            }
+        } else if (program.items[i]->type == STMT_FUNC_DECL) {
             register_function(program.items[i]->as.func_decl.name,
                                program.items[i]->as.func_decl.params,
                                program.items[i]->as.func_decl.body);
@@ -604,7 +681,7 @@ void interpret_program(StmtList program) {
     }
 
     for (int i = 0; i < program.count; i++) {
-        if (program.items[i]->type != STMT_FUNC_DECL) {
+        if (program.items[i]->type != STMT_FUNC_DECL && program.items[i]->type != STMT_IMPORT) {
             ExecResult top_result = exec_stmt(program.items[i], &env);
             if (top_result.signal == SIGNAL_ERROR) {
                 fprintf(stderr, "Uncaught error: %s\n", top_result.error_message);
@@ -639,7 +716,13 @@ void interpret_program(StmtList program) {
 
 void interpret_repl_program(StmtList program, Environment *env) {
     for (int i = 0; i < program.count; i++) {
-        if (program.items[i]->type == STMT_FUNC_DECL) {
+        if (program.items[i]->type == STMT_IMPORT) {
+            ExecResult r = exec_stmt(program.items[i], env);
+            if (r.signal == SIGNAL_ERROR) {
+                fprintf(stderr, "Runtime error: %s\n", r.error_message);
+                return;
+            }
+        } else if (program.items[i]->type == STMT_FUNC_DECL) {
             register_function(program.items[i]->as.func_decl.name,
                                program.items[i]->as.func_decl.params,
                                program.items[i]->as.func_decl.body);
@@ -648,7 +731,7 @@ void interpret_repl_program(StmtList program, Environment *env) {
 
     for (int i = 0; i < program.count; i++) {
         Stmt *s = program.items[i];
-        if (s->type == STMT_FUNC_DECL) continue;
+        if (s->type == STMT_FUNC_DECL || s->type == STMT_IMPORT) continue;
 
         if (s->type == STMT_EXPR) {
             ExecResult r = exec_none();

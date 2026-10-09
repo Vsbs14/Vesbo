@@ -180,6 +180,12 @@ Stmt *make_index_set_stmt(const char *name, Expr *index, Expr *value, int line) 
     return s;
 }
 
+Stmt *make_import_stmt(char *path, int line) {
+    Stmt *s = alloc_stmt(STMT_IMPORT, line);
+    s->as.import_stmt.path = path;
+    return s;
+}
+
 Stmt *make_if_stmt(Expr *condition, StmtList then_branch, StmtList else_branch, int has_else, int line) {
     Stmt *s = alloc_stmt(STMT_IF, line);
     s->as.if_stmt.condition = condition;
@@ -319,6 +325,9 @@ void free_stmt(Stmt *stmt) {
             free(stmt->as.index_set.name);
             free_expr(stmt->as.index_set.index);
             free_expr(stmt->as.index_set.value);
+            break;
+        case STMT_IMPORT:
+            free(stmt->as.import_stmt.path);
             break;
         case STMT_IF:
             free_expr(stmt->as.if_stmt.condition);

@@ -1,0 +1,9 @@
+import "math_mod"
+
+fnc main()
+    output MOD_NAME
+    var s is add(15, 27)
+    output s
+    var p is multiply(6, 7)
+    output p
+    output "import test success"

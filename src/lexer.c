@@ -40,7 +40,6 @@ void lexer_cleanup(void) {
 }
 
 void lexer_init(const char *source) {
-    lexer_cleanup();
     lexer.source = source;
     lexer.start = 0;
     lexer.current = 0;
@@ -49,6 +48,30 @@ void lexer_init(const char *source) {
     lexer.indent_stack[0] = 0;
     lexer.indent_count = 1;
     lexer.pending_dedents = 0;
+}
+
+LexerState lexer_get_state(void) {
+    LexerState s;
+    s.source = lexer.source;
+    s.start = lexer.start;
+    s.current = lexer.current;
+    s.line = lexer.line;
+    s.at_line_start = lexer.at_line_start;
+    memcpy(s.indent_stack, lexer.indent_stack, sizeof(lexer.indent_stack));
+    s.indent_count = lexer.indent_count;
+    s.pending_dedents = lexer.pending_dedents;
+    return s;
+}
+
+void lexer_set_state(LexerState state) {
+    lexer.source = state.source;
+    lexer.start = state.start;
+    lexer.current = state.current;
+    lexer.line = state.line;
+    lexer.at_line_start = state.at_line_start;
+    memcpy(lexer.indent_stack, state.indent_stack, sizeof(lexer.indent_stack));
+    lexer.indent_count = state.indent_count;
+    lexer.pending_dedents = state.pending_dedents;
 }
 
 static char peek() { return lexer.source[lexer.current]; }
@@ -284,6 +307,7 @@ static Token identifier_or_keyword_token() {
     if (len == 3 && strncmp(text, "try", 3) == 0) return make_token(TOKEN_TRY);
     if (len == 5 && strncmp(text, "catch", 5) == 0) return make_token(TOKEN_CATCH);
     if (len == 6 && strncmp(text, "output", 6) == 0) return make_token(TOKEN_OUTPUT);
+    if (len == 6 && strncmp(text, "import", 6) == 0) return make_token(TOKEN_IMPORT);
     if (len == 4 && strncmp(text, "true", 4) == 0) return make_token(TOKEN_TRUE);
     if (len == 5 && strncmp(text, "false", 5) == 0) return make_token(TOKEN_FALSE);
     if (len == 4 && strncmp(text, "none", 4) == 0) return make_token(TOKEN_NONE);

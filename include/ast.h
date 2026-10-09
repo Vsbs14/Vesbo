@@ -21,6 +21,7 @@ typedef enum {
     STMT_VAR_DECL,
     STMT_ASSIGN,
     STMT_INDEX_SET,    // set arr[i] to val / set map[k] to val
+    STMT_IMPORT,
     STMT_IF,
     STMT_LOOP_TILL,
     STMT_LOOP_WHILE,
@@ -109,6 +110,7 @@ struct Stmt {
         struct { char *name; Expr *value; } assign;
 
         struct { char *name; Expr *index; Expr *value; } index_set;
+        struct { char *path; } import_stmt;
 
         struct {
             Expr *condition;
@@ -168,6 +170,7 @@ Expr *make_call_expr(const char *callee_name, ExprList args, int line);
 Stmt *make_var_decl_stmt(const char *name, Expr *value, int is_global, int line);
 Stmt *make_assign_stmt(const char *name, Expr *value, int line);
 Stmt *make_index_set_stmt(const char *name, Expr *index, Expr *value, int line);
+Stmt *make_import_stmt(char *path, int line);
 Stmt *make_if_stmt(Expr *condition, StmtList then_branch, StmtList else_branch, int has_else, int line);
 Stmt *make_loop_till_stmt(Expr *condition, StmtList body, int line);
 Stmt *make_loop_while_stmt(Expr *condition, StmtList body, int line);

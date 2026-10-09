@@ -10,6 +10,7 @@
 #include "../include/bytecode.h"
 #include "../include/disassemble.h"
 #include "../include/repl.h"
+#include "../include/module.h"
 
 #define VESBO_VERSION "0.2.0"
 
@@ -263,6 +264,7 @@ static Chunk *load_bytecode(const char *path) {
 
 int main(int argc, char **argv) {
     atexit(value_cleanup);
+    atexit(module_system_cleanup);
 
     if (argc < 2) {
         repl_start();
@@ -362,6 +364,8 @@ int main(int argc, char **argv) {
     }
 
     char *source = read_file(source_file);
+    module_system_init();
+    module_set_current_file(source_file);
     lexer_init(source);
     StmtList program = parse_program();
 
