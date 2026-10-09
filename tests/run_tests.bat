@@ -139,6 +139,23 @@ findstr /x /c:"Hello, World!" "%OUTPUT%" >nul || goto :failed
 findstr /x /c:"User: Alice, age: 30" "%OUTPUT%" >nul || goto :failed
 del "%OUTPUT%.vbo" >nul 2>nul
 
+REM Test Standard Library (math, strings, lists) in interpreter
+"%ROOT%\vesbo.exe" "%~dp0stdlib_test.vsb" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"stdlib test success" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"reversed: 20, 15, 10, 5" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"pad_left: 007" "%OUTPUT%" >nul || goto :failed
+
+REM Test Standard Library (math, strings, lists) in bytecode VM
+"%ROOT%\vesbo.exe" -c "%~dp0stdlib_test.vsb" -o "%OUTPUT%.vbo" >nul 2>&1
+if errorlevel 1 goto :failed
+"%ROOT%\vesbo.exe" "%OUTPUT%.vbo" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"stdlib test success" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"reversed: 20, 15, 10, 5" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"pad_left: 007" "%OUTPUT%" >nul || goto :failed
+del "%OUTPUT%.vbo" >nul 2>nul
+
 REM Test disassembler on .vsb source
 "%ROOT%\vesbo.exe" -d "%ROOT%\examples\array_loops.vsb" > "%OUTPUT%" 2>&1
 if errorlevel 1 goto :failed

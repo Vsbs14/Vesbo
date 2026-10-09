@@ -1,0 +1,73 @@
+-- Vesbo Standard Library: Math Module
+
+global var PI is 3.141592653589793
+global var E is 2.718281828459045
+
+fnc abs(x)
+    if x < 0
+        return -x
+    return x
+
+fnc min(a, b)
+    if a < b
+        return a
+    return b
+
+fnc max(a, b)
+    if a > b
+        return a
+    return b
+
+fnc clamp(val, low, high)
+    if val < low
+        return low
+    if val > high
+        return high
+    return val
+
+fnc sign(x)
+    if x > 0
+        return 1
+    if x < 0
+        return -1
+    return 0
+
+fnc is_even(n)
+    return (n % 2) == 0
+
+fnc is_odd(n)
+    return (n % 2) != 0
+
+fnc pow(base, exp)
+    if exp == 0
+        return 1
+    var result is 1
+    var i is 0
+    loop while i < exp
+        set result to result * base
+        set i to i + 1
+    return result
+
+fnc factorial(n)
+    if n <= 1
+        return 1
+    var result is 1
+    var i is 2
+    loop while i <= n
+        set result to result * i
+        set i to i + 1
+    return result
+
+fnc gcd(a, b)
+    var x is abs(a)
+    var y is abs(b)
+    loop while y != 0
+        var temp is y
+        set y to x % y
+        set x to temp
+    return x
+
+fnc lcm(a, b)
+    if a == 0 or b == 0
+        return 0
+    return abs(a * b) / gcd(a, b)

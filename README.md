@@ -281,6 +281,56 @@ fnc main()
 - **Entry Points**: Standalone `fnc main()` definitions in imported library files are ignored, preserving the caller application's entry point.
 - **Self-Contained Bytecode**: When compiling to bytecode (`-c`), all imported modules are statically compiled into the single `.vbo` binary. The resulting bytecode executable has no external file dependencies at runtime.
 
+### Standard Library
+
+Vesbo includes a built-in standard library written in pure Vesbo under `std/`:
+
+- **`std/math`**:
+  ```vsb
+  import "std/math"
+
+  output abs(-42)            -- 42
+  output min(10, 20)         -- 10
+  output max(10, 20)         -- 20
+  output clamp(150, 0, 100)  -- 100
+  output pow(2, 8)           -- 256
+  output factorial(5)        -- 120
+  output gcd(54, 24)         -- 6
+  output lcm(4, 6)           -- 12
+  output is_even(10)         -- true
+  output is_odd(10)          -- false
+  output PI                  -- 3.14159...
+  output E                   -- 2.71828...
+  ```
+
+- **`std/strings`**:
+  ```vsb
+  import "std/strings"
+
+  output starts_with("vesbo-lang", "vesbo")  -- true
+  output ends_with("main.vsb", ".vsb")       -- true
+  output repeat("=", 10)                     -- "=========="
+  output pad_left("42", 5, "0")              -- "00042"
+  output pad_right("hi", 5, " ")             -- "hi   "
+  output join(["a", "b", "c"], "-")          -- "a-b-c"
+  var parts is split("one,two,three", ",")   -- ["one", "two", "three"]
+  ```
+
+- **`std/lists`**:
+  ```vsb
+  import "std/lists"
+
+  var nums is [10, 20, 30, 40]
+  output sum(nums)                           -- 100
+  output average(nums)                       -- 25
+  output min_item(nums)                      -- 10
+  output max_item(nums)                      -- 40
+  output reverse(nums)                       -- [40, 30, 20, 10]
+  output slice(nums, 1, 3)                   -- [20, 30]
+  output index_of(nums, 30)                  -- 2
+  output count_occurrences(nums, 20)         -- 1
+  ```
+
 ### Conditions
 
 ```vsb

@@ -1,0 +1,79 @@
+-- Vesbo Standard Library: Strings Module
+
+fnc starts_with(str, prefix)
+    var slen is length(str)
+    var plen is length(prefix)
+    if plen > slen
+        return false
+    var i is 0
+    loop while i < plen
+        if str[i] != prefix[i]
+            return false
+        set i to i + 1
+    return true
+
+fnc ends_with(str, suffix)
+    var slen is length(str)
+    var xlen is length(suffix)
+    if xlen > slen
+        return false
+    var offset is slen - xlen
+    var i is 0
+    loop while i < xlen
+        if str[offset + i] != suffix[i]
+            return false
+        set i to i + 1
+    return true
+
+fnc repeat(str, count)
+    if count <= 0
+        return ""
+    var result is ""
+    var i is 0
+    loop while i < count
+        set result to result + str
+        set i to i + 1
+    return result
+
+fnc pad_left(str, target_len, pad_char)
+    var slen is length(str)
+    if slen >= target_len
+        return str
+    var padding is repeat(pad_char, target_len - slen)
+    return padding + str
+
+fnc pad_right(str, target_len, pad_char)
+    var slen is length(str)
+    if slen >= target_len
+        return str
+    var padding is repeat(pad_char, target_len - slen)
+    return str + padding
+
+fnc contains_char(str, ch)
+    loop through str as c
+        if c == ch
+            return true
+    return false
+
+fnc split(str, delim)
+    var parts is []
+    var current_part is ""
+    loop through str as ch
+        if ch == delim
+            set parts to push(parts, current_part)
+            set current_part to ""
+        else
+            set current_part to current_part + ch
+    set parts to push(parts, current_part)
+    return parts
+
+fnc join(arr, delim)
+    var count is length(arr)
+    if count == 0
+        return ""
+    var result is string(arr[0])
+    var i is 1
+    loop while i < count
+        set result to result + delim + string(arr[i])
+        set i to i + 1
+    return result

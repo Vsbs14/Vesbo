@@ -1,0 +1,75 @@
+-- Vesbo Standard Library: Lists Module
+
+fnc reverse(arr)
+    var n is length(arr)
+    var result is []
+    var i is n - 1
+    loop while i >= 0
+        set result to push(result, arr[i])
+        set i to i - 1
+    return result
+
+fnc slice(arr, start_idx, end_idx)
+    var n is length(arr)
+    var result is []
+    var i is start_idx
+    loop while i < end_idx and i < n
+        set result to push(result, arr[i])
+        set i to i + 1
+    return result
+
+fnc index_of(arr, target)
+    var n is length(arr)
+    var i is 0
+    loop while i < n
+        if arr[i] == target
+            return i
+        set i to i + 1
+    return -1
+
+fnc sum(arr)
+    var total is 0
+    loop through arr as item
+        set total to total + item
+    return total
+
+fnc average(arr)
+    var n is length(arr)
+    if n == 0
+        return 0
+    return sum(arr) / n
+
+fnc min_item(arr)
+    var n is length(arr)
+    if n == 0
+        return none
+    var m is arr[0]
+    loop through arr as item
+        if item < m
+            set m to item
+    return m
+
+fnc max_item(arr)
+    var n is length(arr)
+    if n == 0
+        return none
+    var m is arr[0]
+    loop through arr as item
+        if item > m
+            set m to item
+    return m
+
+fnc concat(arr1, arr2)
+    var result is []
+    loop through arr1 as item
+        set result to push(result, item)
+    loop through arr2 as item
+        set result to push(result, item)
+    return result
+
+fnc count_occurrences(arr, target)
+    var count is 0
+    loop through arr as item
+        if item == target
+            set count to count + 1
+    return count
