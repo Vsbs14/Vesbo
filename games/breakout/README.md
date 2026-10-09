@@ -6,17 +6,13 @@ A complete, playable 2D Breakout / Brick Breaker game written in **pure Vesbo (`
 
 ## Quick Start
 
-### 1. Run with Tree-Walking Interpreter
-```bat
-games\breakout\run.bat
-```
-*(or from root: `vesbo.exe games\breakout\breakout.vsb`)*
+### Windows
+- Interpreter: `games\breakout\run.bat` (or `vesbo.exe games\breakout\breakout.vsb`)
+- Bytecode VM: `games\breakout\run_bytecode.bat` (or `vesbo.exe -c games\breakout\breakout.vsb -o games\breakout\breakout.vbo && vesbo.exe games\breakout\breakout.vbo`)
 
-### 2. Run with Bytecode Virtual Machine (VM)
-```bat
-games\breakout\run_bytecode.bat
-```
-*(or from root: `vesbo.exe -c games\breakout\breakout.vsb -o games\breakout\breakout.vbo && vesbo.exe games\breakout\breakout.vbo`)*
+### Linux & macOS (requires Raylib installed on system)
+- Interpreter: `./games/breakout/run.sh` (or `./vesbo games/breakout/breakout.vsb`)
+- Bytecode VM: `./games/breakout/run_bytecode.sh` (or `./vesbo -c games/breakout/breakout.vsb -o games/breakout/breakout.vbo && ./vesbo games/breakout/breakout.vbo`)
 
 ---
 

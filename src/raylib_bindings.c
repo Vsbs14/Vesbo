@@ -1,10 +1,13 @@
+#ifndef NO_RAYLIB
 #include "raylib.h"
+#endif
 #include "../include/raylib_bindings.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 
+#ifndef NO_RAYLIB
 /* Case-insensitive string comparison helper */
 static int str_case_eq(const char *a, const char *b) {
     while (*a && *b) {
@@ -129,6 +132,7 @@ static int parse_mouse_button(Value val) {
     }
     return MOUSE_BUTTON_LEFT;
 }
+#endif
 
 /* Check if a given name matches a raylib function (supports both "rl_foo" and "foo") */
 static int matches(const char *name, const char *func) {
@@ -180,6 +184,7 @@ int is_raylib_builtin(const char *name) {
            matches(name, "rl_is_audio_device_ready");
 }
 
+#ifndef NO_RAYLIB
 int call_raylib_builtin(const char *name, Value *args, int arg_count, Value *out,
                         const char **error_message) {
     /* Window Lifecycle */
@@ -591,3 +596,14 @@ int call_raylib_builtin(const char *name, Value *args, int arg_count, Value *out
 
     return 0; /* Not a raylib builtin */
 }
+#else
+int call_raylib_builtin(const char *name, Value *args, int arg_count, Value *out,
+                        const char **error_message) {
+    (void)name;
+    (void)args;
+    (void)arg_count;
+    (void)out;
+    *error_message = "Raylib support is not compiled into this binary. Recompile with Raylib enabled to use Raylib functions.";
+    return -1;
+}
+#endif

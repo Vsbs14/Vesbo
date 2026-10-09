@@ -11,41 +11,79 @@ Vesbo currently has **two execution paths**:
 
 The language and runtime are still under active development.
 
-## Build
+## Build & Installation
 
 ### Windows
 
+**Requirements:**
 Install one of the following C toolchains:
+- Visual Studio Build Tools (MSVC `cl`)
+- MinGW-w64 (`gcc`)
+- LLVM (`clang`)
 
-- MinGW-w64 GCC
-- Visual Studio Build Tools
-- LLVM Clang
+Raylib 6.0 is pre-vendored under `vendor/raylib/` for Windows (includes headers, import libraries, and `raylib.dll`).
 
-From the project directory, run:
-
+**Build command:**
 ```bat
 build.bat
 ```
+*(To build without Raylib graphics support, run `build.bat --no-raylib`)*
 
-Then run a Vesbo source file:
-
-```bat
-vesbo.exe examples\array_loops.vsb
-```
-
-Run the smoke tests with:
-
+**Run smoke tests:**
 ```bat
 tests\run_tests.bat
 ```
 
-### Linux and macOS
+### Linux
 
-With GCC or Clang and `make` installed, run:
+**Requirements:**
+- C compiler: `gcc` or `clang`
+- Build tool: `make`
+- *(Optional, for 2D games/Raylib support)*: `libraylib-dev` and `pkg-config`
+  - Ubuntu / Debian / Pop!_OS: `sudo apt update && sudo apt install build-essential libraylib-dev pkg-config`
+  - Arch Linux: `sudo pacman -S base-devel raylib pkgconf`
+  - Fedora: `sudo dnf install gcc make raylib-devel pkgconf`
 
-```sh
+**Build command:**
+```bash
 make
-./vesbo examples/array_loops.vsb
+```
+The `Makefile` automatically detects Raylib via `pkg-config` or standard system library paths. If Raylib is not installed, it builds cleanly with a stub fallback so core Vesbo works out-of-the-box on any system.
+
+To explicitly build without Raylib:
+```bash
+make NO_RAYLIB=1
+```
+
+**Run smoke tests:**
+```bash
+./tests/run_tests.sh
+```
+
+### macOS
+
+**Requirements:**
+- Xcode Command Line Tools: `xcode-select --install`
+- Build tool: `make` (included with Command Line Tools)
+- *(Optional, for 2D games/Raylib support)* via Homebrew:
+  ```bash
+  brew install raylib pkg-config
+  ```
+
+**Build command:**
+```bash
+make
+```
+The `Makefile` automatically discovers Homebrew Raylib installations (both Apple Silicon `/opt/homebrew` and Intel `/usr/local`). If Raylib is not installed, it automatically builds cleanly with the stub fallback.
+
+To explicitly build without Raylib:
+```bash
+make NO_RAYLIB=1
+```
+
+**Run smoke tests:**
+```bash
+./tests/run_tests.sh
 ```
 
 ## Running Vesbo
@@ -550,7 +588,7 @@ include/   Public C interfaces and data structures
 games/    Full games written in pure Vesbo (Breakout, etc.)
 src/       Lexer, parser, AST, runtime, bytecode compiler, VM, and CLI
 examples/  Vesbo programs and compiled bytecode examples
-tests/     Regression program and Windows smoke-test runner
+tests/     Regression programs and smoke-test runners (run_tests.bat, run_tests.sh)
 ```
 
 Important source files include:
@@ -609,18 +647,16 @@ currently implemented**.
 
 ### Games
 
-Play Breakout written entirely in pure Vesbo:
+Play Breakout written entirely in pure Vesbo (requires Raylib):
 
-```bat
-vesbo.exe games\breakout\breakout.vsb
-```
+**On Windows:**
+- Interpreter: `games\breakout\run.bat` (or `vesbo.exe games\breakout\breakout.vsb`)
+- Bytecode VM: `games\breakout\run_bytecode.bat` (or `vesbo.exe -c games\breakout\breakout.vsb -o games\breakout\breakout.vbo && vesbo.exe games\breakout\breakout.vbo`)
 
-Or compile and run as bytecode:
-
-```bat
-vesbo.exe -c games\breakout\breakout.vsb -o games\breakout\breakout.vbo
-vesbo.exe games\breakout\breakout.vbo
-```
+**On Linux & macOS:**
+*(Requires Raylib installed on the host system)*
+- Interpreter: `./games/breakout/run.sh` (or `./vesbo games/breakout/breakout.vsb`)
+- Bytecode VM: `./games/breakout/run_bytecode.sh` (or `./vesbo -c games/breakout/breakout.vsb -o games/breakout/breakout.vbo && ./vesbo games/breakout/breakout.vbo`)
 
 ### Examples
 
@@ -629,21 +665,42 @@ The repository includes several example programs:
 ```text
 examples/array_loops.vsb
 examples/calculator.vsb
+examples/showcase.vsb
 examples/try_catch_test.vsb
 ```
 
-There are also compiled `.vbo` examples in the repository.
+Run an example using the tree-walking interpreter:
 
-For a quick test of the bytecode pipeline:
+- **Linux / macOS:**
+  ```bash
+  ./vesbo examples/showcase.vsb
+  ```
+- **Windows:**
+  ```bat
+  vesbo.exe examples\showcase.vsb
+  ```
 
-```sh
-./vesbo -c examples/array_loops.vsb -o /tmp/array_loops.vbo
-./vesbo /tmp/array_loops.vbo
-```
+Compile and run an example using the bytecode compiler and VM:
 
-On Windows:
+- **Linux / macOS:**
+  ```bash
+  ./vesbo -c examples/array_loops.vsb -o array_loops.vbo
+  ./vesbo array_loops.vbo
+  ```
+- **Windows:**
+  ```bat
+  vesbo.exe -c examples\array_loops.vsb -o array_loops.vbo
+  vesbo.exe array_loops.vbo
+  ```
 
-```bat
-vesbo.exe -c examples\array_loops.vsb -o array_loops.vbo
-vesbo.exe array_loops.vbo
-```
+Inspect the compiled bytecode instructions:
+
+- **Linux / macOS:**
+  ```bash
+  ./vesbo -d examples/array_loops.vsb
+  ```
+- **Windows:**
+  ```bat
+  vesbo.exe -d examples\array_loops.vsb
+  ```
+

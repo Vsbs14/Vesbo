@@ -72,7 +72,7 @@ static int file_exists_at(const char *path) {
 char *module_resolve_path(const char *raw_path, const char *relative_to_file) {
     if (!raw_path || raw_path[0] == '\0') return NULL;
 
-    char candidate[1024];
+    char candidate[4096];
     size_t raw_len = strlen(raw_path);
     int has_vsb_ext = (raw_len >= 4 && strcmp(raw_path + raw_len - 4, ".vsb") == 0);
 
