@@ -213,6 +213,25 @@ var missing is none
 
 Strings can be delimited using double quotes (`"..."`), single quotes (`'...'`), or hashes (`#...#`). Escape sequences like `\n`, `\t`, `\"`, `\'`, `\\`, and `\#` are supported.
 
+### String Interpolation
+
+Embed dynamic expressions, variables, and function calls directly inside strings using `$"..."` or `f"..."`:
+
+```vsb
+var name is "Alice"
+var score is 95
+output $"Hello, {name}! Your score is {score}."
+output f"Next level in {100 - score} points."
+output $"User details: {user["name"]} (age {user["age"]})"
+```
+
+- **Escape Braces**: Use `{{` and `}}` to output literal `{` and `}` characters:
+  ```vsb
+  output $"Set notation: {{ {x}, {y} }}"
+  ```
+- **Expression Evaluation**: Any valid Vesbo expression can appear inside `{...}`, including arithmetic, function calls, collections, and index access. Expressions are automatically formatted to strings.
+- **Quote Styles**: Works across quote formats: `$"..."`, `$'...'`, `$#...#`, `f"..."`, `f'...'`.
+
 Variables can be reassigned with `set`:
 
 ```vsb

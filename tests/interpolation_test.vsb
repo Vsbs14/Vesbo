@@ -1,0 +1,16 @@
+fnc main()
+    var name is "World"
+    var count is 5
+    var user is { "name": "Alice", "age": 30 }
+    var items is [10, 20, 30]
+
+    output $"Hello, {name}!"
+    output $"Count is {count + 1} items."
+    output $"User: {user["name"]}, age: {user["age"]}"
+    output $"First item: {items[0]}"
+    output $"Escaped: {{ {name} }}"
+    output f"Prefix f: {count * 2}"
+    output $'Single quote: {name}'
+    output $#Hash quote: {name}#
+    output $"Uppercase: {uppercase(name)}"
+    output "interpolation test success"

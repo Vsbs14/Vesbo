@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 static Token current_tok;
 static Token previous_tok;
@@ -78,6 +79,157 @@ static Expr *parse_postfix(Expr *expr, int line) {
     return expr;
 }
 
+static Expr *parse_sub_expression(const char *expr_src, int line) {
+    (void)line;
+    LexerState saved_lex = lexer_get_state();
+    ParserState saved_parse = parser_get_state();
+
+    lexer_init(expr_src);
+    parser_advance();
+    Expr *expr = parse_expression();
+    if (current_tok.type != TOKEN_EOF) {
+        error_at(&current_tok, "unexpected token in interpolated expression");
+    }
+
+    lexer_set_state(saved_lex);
+    parser_set_state(saved_parse);
+
+    return expr;
+}
+
+static Expr *parse_interpolated_string(const char *raw, int line) {
+    int cap = 64;
+    int text_len = 0;
+    char *text_buf = malloc(cap);
+    Expr *result = NULL;
+
+    const char *p = raw;
+    while (*p) {
+        if (p[0] == '{' && p[1] == '{') {
+            if (text_len + 1 >= cap) { cap *= 2; text_buf = realloc(text_buf, cap); }
+            text_buf[text_len++] = '{';
+            p += 2;
+        } else if (p[0] == '}' && p[1] == '}') {
+            if (text_len + 1 >= cap) { cap *= 2; text_buf = realloc(text_buf, cap); }
+            text_buf[text_len++] = '}';
+            p += 2;
+        } else if (p[0] == '\\' && p[1] != '\0') {
+            char esc = p[1];
+            switch (esc) {
+                case 'n': esc = '\n'; break;
+                case 't': esc = '\t'; break;
+                case 'r': esc = '\r'; break;
+                case '\\': esc = '\\'; break;
+                case '"': esc = '"'; break;
+                case '\'': esc = '\''; break;
+                case '#': esc = '#'; break;
+                default: break;
+            }
+            if (text_len + 1 >= cap) { cap *= 2; text_buf = realloc(text_buf, cap); }
+            text_buf[text_len++] = esc;
+            p += 2;
+        } else if (p[0] == '{') {
+            if (text_len > 0) {
+                text_buf[text_len] = '\0';
+                Expr *lit = make_string_expr(text_buf, line);
+                if (!result) {
+                    result = lit;
+                } else {
+                    result = make_binary_expr(BIN_ADD, result, lit, line);
+                }
+                text_len = 0;
+            }
+
+            p++; // skip '{'
+            int depth = 1;
+            const char *expr_start = p;
+            while (*p && depth > 0) {
+                if (*p == '"' || *p == '\'' || *p == '#') {
+                    char q = *p++;
+                    while (*p && *p != q) {
+                        if (*p == '\\' && *(p + 1)) p++;
+                        p++;
+                    }
+                    if (*p == q) p++;
+                } else if (*p == '{') {
+                    depth++;
+                    p++;
+                } else if (*p == '}') {
+                    depth--;
+                    if (depth == 0) break;
+                    p++;
+                } else {
+                    p++;
+                }
+            }
+
+            if (depth > 0) {
+                fprintf(stderr, "Parse error at line %d: unterminated expression in interpolated string\n", line);
+                free(text_buf);
+                if (repl_recovery_buf) longjmp(*repl_recovery_buf, 1);
+                exit(1);
+            }
+
+            int expr_len = (int)(p - expr_start);
+            if (*p == '}') p++; // skip closing '}'
+
+            char *expr_code = malloc(expr_len + 1);
+            memcpy(expr_code, expr_start, expr_len);
+            expr_code[expr_len] = '\0';
+
+            const char *check_p = expr_code;
+            while (*check_p && isspace((unsigned char)*check_p)) check_p++;
+            if (*check_p == '\0') {
+                fprintf(stderr, "Parse error at line %d: empty expression '{}' in interpolated string\n", line);
+                free(expr_code);
+                free(text_buf);
+                if (repl_recovery_buf) longjmp(*repl_recovery_buf, 1);
+                exit(1);
+            }
+
+            Expr *sub_expr = parse_sub_expression(expr_code, line);
+            free(expr_code);
+
+            ExprList args;
+            expr_list_init(&args);
+            expr_list_add(&args, sub_expr);
+            Expr *str_call = make_call_expr("string", args, line);
+
+            if (!result) {
+                result = str_call;
+            } else {
+                result = make_binary_expr(BIN_ADD, result, str_call, line);
+            }
+        } else if (p[0] == '}') {
+            fprintf(stderr, "Parse error at line %d: unexpected '}' in interpolated string (use '}}' to escape)\n", line);
+            free(text_buf);
+            if (repl_recovery_buf) longjmp(*repl_recovery_buf, 1);
+            exit(1);
+        } else {
+            if (text_len + 1 >= cap) { cap *= 2; text_buf = realloc(text_buf, cap); }
+            text_buf[text_len++] = *p++;
+        }
+    }
+
+    if (text_len > 0) {
+        text_buf[text_len] = '\0';
+        Expr *lit = make_string_expr(text_buf, line);
+        if (!result) {
+            result = lit;
+        } else {
+            result = make_binary_expr(BIN_ADD, result, lit, line);
+        }
+    }
+
+    free(text_buf);
+
+    if (!result) {
+        result = make_string_expr("", line);
+    }
+
+    return result;
+}
+
 static Expr *parse_primary(void) {
     int line = current_tok.line;
 
@@ -86,6 +238,9 @@ static Expr *parse_primary(void) {
     }
     if (match(TOKEN_STRING)) {
         return make_string_expr(previous_tok.lexeme, line);
+    }
+    if (match(TOKEN_INTERPOLATED_STRING)) {
+        return parse_postfix(parse_interpolated_string(previous_tok.lexeme, line), line);
     }
     if (match(TOKEN_TRUE)) {
         return make_bool_expr(1, line);
