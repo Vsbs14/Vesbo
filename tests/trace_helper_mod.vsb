@@ -1,0 +1,8 @@
+-- Helper module for cross-module stack trace testing (Milestone L6)
+
+fnc mod_leaf_fail(x)
+    var bad is x / 0
+    return bad
+
+fnc mod_middle_call(x)
+    return mod_leaf_fail(x + 1)

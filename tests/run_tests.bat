@@ -233,6 +233,80 @@ if errorlevel 1 goto :failed
 findstr /x /c:"15" "%OUTPUT%" >nul || goto :failed
 del "%OUTPUT%.vbo" >nul 2>nul
 
+REM Test Milestones L1-L6 in tree-walking interpreter
+"%ROOT%\vesbo.exe" "%~dp0milestones_l1_l6_test.vsb" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"L1_arr_ref:99:7" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L1_map_ref:250:10" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L1_struct_ref:30:3" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L1_gc_ran:true" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L2_globals:15:40" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L2_map_sum:89700" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L2_deep_stack:350" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L3_dot_assign:10:20" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L3_method_pan:32:514" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L3_defaults:3:2:5:61" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L4_status_init:suspended:true" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L4_coro_vals:30:150:27" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L4_status_done:dead:false" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L4_nested_coro:30:50" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L4_coro_struct:25:100" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L4_nested_catch:110:dead" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L4_bad_start_status:dead" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L6_trace:true:true:true" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L6_profile:true" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"MILESTONES_L1_L6_PASS" "%OUTPUT%" >nul || goto :failed
+
+REM Test Milestones L1-L6 in compiled .vbo bytecode VM
+"%ROOT%\vesbo.exe" -c "%~dp0milestones_l1_l6_test.vsb" -o "%OUTPUT%.vbo" >nul 2>&1
+if errorlevel 1 goto :failed
+"%ROOT%\vesbo.exe" "%OUTPUT%.vbo" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"L1_arr_ref:99:7" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L1_map_ref:250:10" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L1_struct_ref:30:3" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L1_gc_ran:true" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L2_globals:15:40" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L2_map_sum:89700" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L2_deep_stack:350" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L3_dot_assign:10:20" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L3_method_pan:32:514" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L3_defaults:3:2:5:61" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L4_status_init:suspended:true" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L4_coro_vals:30:150:27" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L4_status_done:dead:false" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L4_nested_coro:30:50" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L4_coro_struct:25:100" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L4_nested_catch:110:dead" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L4_bad_start_status:dead" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L6_trace:true:true:true" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"L6_profile:true" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"MILESTONES_L1_L6_PASS" "%OUTPUT%" >nul || goto :failed
+del "%OUTPUT%.vbo" >nul 2>nul
+
+REM Test Milestones L1-L6 under --gc-stress and --profile
+"%ROOT%\vesbo.exe" --gc-stress --profile --vm "%~dp0milestones_l1_l6_test.vsb" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"MILESTONES_L1_L6_PASS" "%OUTPUT%" >nul || goto :failed
+findstr /c:"[Profile] Instructions:" "%OUTPUT%" >nul || goto :failed
+
+"%ROOT%\vesbo.exe" --gc-stress "%~dp0milestones_l1_l6_test.vsb" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"MILESTONES_L1_L6_PASS" "%OUTPUT%" >nul || goto :failed
+
+REM Test Milestone L5 C Embedding API host program
+if not exist "%~dp0embed_host_test.exe" (
+    call "%ROOT%\build.bat"
+    if errorlevel 1 goto :failed
+)
+"%~dp0embed_host_test.exe" "%~dp0embed_script.vsb" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"tick1 status=1 val=16" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"tick2 status=1 val=35" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"tick3 status=0 val=1035" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"host_ticks=102" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"EMBED_HOST_PASS" "%OUTPUT%" >nul || goto :failed
+
 del "%OUTPUT%" >nul 2>nul
 echo All Vesbo smoke tests passed.
 exit /b 0

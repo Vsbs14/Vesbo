@@ -1,0 +1,189 @@
+-- Milestones L1-L6 Comprehensive Test Suite
+import "trace_helper_mod.vsb"
+
+global var g_slot_a is 10
+global var g_slot_b is 20
+
+struct Vec2
+    var x is 0
+    var y is 0
+
+    fnc move_by(dx, dy)
+        self.x = self.x + dx
+        set self.y to self.y + dy
+        return self
+
+    fnc len_sq()
+        return self.x * self.x + self.y * self.y
+
+struct Camera
+    var position is none
+    var zoom is 1
+
+    fnc pan(dx, dy)
+        self.position.move_by(dx, dy)
+        return self.position.x + self.position.y
+
+fnc mutate_globals(delta)
+    g_slot_a = g_slot_a + delta
+    set g_slot_b to g_slot_b * 2
+
+fnc deep_recurse(n, acc)
+    if n <= 0
+        return acc
+    return deep_recurse(n - 1, acc + 1)
+
+fnc coro_accumulator(start)
+    var local_arr is [start, start * 2]
+    var step1 is yield local_arr[0] + local_arr[1]
+    var step2 is yield step1 + 100
+    return step2 + local_arr[1]
+
+struct ConfigBox
+    var items is [10, 20]
+    var scale is 2 + 3
+    var origin is Vec2(5, 6)
+
+fnc inner_worker(base)
+    yield base + 5
+    return base + 15
+
+fnc outer_worker(base)
+    var sub is coroutine(inner_worker, base)
+    var v1 is resume(sub)
+    yield v1 * 2
+    var v2 is resume(sub)
+    return v2 * 2
+
+fnc coro_struct_worker(v)
+    var moved is v.move_by(2, 3)
+    yield moved.len_sq()
+    return Vec2(6, 8)
+
+fnc inner_fail_worker(x)
+    yield x + 1
+    return x / 0
+
+fnc outer_catch_worker(x)
+    var sub is coroutine(inner_fail_worker, x)
+    var first is resume(sub)
+    var recovered is -1
+    try
+        resume(sub)
+    catch err
+        recovered = first + 100
+    return StackCheck(recovered, coroutine_status(sub))
+
+struct StackCheck
+    var code is 0
+    var sub_status is "unknown"
+
+fnc trigger_cross_module_error()
+    return mod_middle_call(41)
+
+fnc main()
+    -- L1: Reference Semantics, copy(), and GC
+    var arr1 is [1, 2, 3]
+    var arr2 is arr1
+    arr2[0] = 99
+    var arr3 is copy(arr1)
+    arr3[0] = 7
+    output "L1_arr_ref:" + string(arr1[0]) + ":" + string(arr3[0])
+
+    var map1 is {"hp": 100, "mp": 50}
+    var map2 is map1
+    map2["hp"] = 250
+    var map3 is copy(map1)
+    map3["hp"] = 10
+    output "L1_map_ref:" + string(map1["hp"]) + ":" + string(map3["hp"])
+
+    var v1 is Vec2(3, 4)
+    var v2 is v1
+    v2.x = 30
+    var v3 is copy(v1)
+    v3.x = 3
+    output "L1_struct_ref:" + string(v1.x) + ":" + string(v3.x)
+
+    -- Allocate temporary garbage and run GC
+    var g_i is 0
+    loop while g_i < 50
+        var tmp_arr is [g_i, g_i + 1, "temp_" + string(g_i)]
+        g_i = g_i + 1
+    gc_collect()
+    var stats1 is gc_stats()
+    output "L1_gc_ran:" + string(stats1["collections"] > 0 and stats1["objects_freed"] > 0)
+
+    -- L2: Fast Core (Slot Globals, Hashed Maps, Growable Stacks)
+    mutate_globals(5)
+    output "L2_globals:" + string(g_slot_a) + ":" + string(g_slot_b)
+
+    var big_map is {}
+    var m_i is 0
+    loop while m_i < 300
+        big_map["k_" + string(m_i)] = m_i * 2
+        m_i = m_i + 1
+    var sum_map is 0
+    var m_j is 0
+    loop while m_j < 300
+        sum_map = sum_map + big_map["k_" + string(m_j)]
+        m_j = m_j + 1
+    output "L2_map_sum:" + string(sum_map)
+    output "L2_deep_stack:" + string(deep_recurse(350, 0))
+
+    -- L3: Structs, Non-Literal Defaults, Nested Dot Access/Mutation, and Methods
+    var cam is Camera(Vec2(0, 0), 2)
+    cam.position.x = 10
+    set cam.position.y to 20
+    output "L3_dot_assign:" + string(cam.position.x) + ":" + string(cam.position.y)
+    var pan_sum is cam.pan(5, -3)
+    output "L3_method_pan:" + string(pan_sum) + ":" + string(cam.position.len_sq())
+
+    var box1 is ConfigBox()
+    var box2 is ConfigBox()
+    push(box1.items, 30)
+    output "L3_defaults:" + string(length(box1.items)) + ":" + string(length(box2.items)) + ":" + string(box1.scale) + ":" + string(box1.origin.len_sq())
+
+    -- L4: Coroutines (Separate Stack, Yield/Resume, Nested, Struct Methods, Error Unwind)
+    var co is coroutine(coro_accumulator, 10)
+    output "L4_status_init:" + coroutine_status(co) + ":" + string(is_alive(co))
+    var r1 is resume(co)
+    gc_collect()
+    var r2 is resume(co, 50)
+    var r3 is resume(co, 7)
+    output "L4_coro_vals:" + string(r1) + ":" + string(r2) + ":" + string(r3)
+    output "L4_status_done:" + coroutine_status(co) + ":" + string(is_alive(co))
+
+    var nco is coroutine(outer_worker, 10)
+    var nr1 is resume(nco)
+    var nr2 is resume(nco)
+    output "L4_nested_coro:" + string(nr1) + ":" + string(nr2)
+
+    var sco is coroutine(coro_struct_worker, Vec2(1, 1))
+    var sr1 is resume(sco)
+    var sr2 is resume(sco)
+    output "L4_coro_struct:" + string(sr1) + ":" + string(sr2.len_sq())
+
+    var eco is coroutine(outer_catch_worker, 9)
+    var er1 is resume(eco)
+    output "L4_nested_catch:" + string(er1.code) + ":" + er1.sub_status
+
+    var bad_co is coroutine(coro_accumulator, 1, 2, 3)
+    try
+        resume(bad_co)
+    catch berr
+        output "L4_bad_start_status:" + coroutine_status(bad_co)
+
+    -- L6: Stack Traces with file:line:col Across Imported Modules & Profiler
+    try
+        trigger_cross_module_error()
+    catch err
+        var trace is stack_trace()
+        var has_mod is contains(trace, "trace_helper_mod.vsb:4:")
+        var has_mid is contains(trace, "mod_middle_call")
+        var has_main is contains(trace, "milestones_l1_l6_test.vsb:")
+        output "L6_trace:" + string(has_mod) + ":" + string(has_mid) + ":" + string(has_main)
+
+    var pstats is profile_stats()
+    output "L6_profile:" + string(pstats["instructions"] > 0 and pstats["allocations"] > 0)
+    output "MILESTONES_L1_L6_PASS"
+

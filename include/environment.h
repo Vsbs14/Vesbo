@@ -10,7 +10,7 @@ typedef struct {
     int capacity;
 } Scope;
 
-typedef struct {
+typedef struct Environment {
     Scope *scopes;
     int count;
     int capacity;

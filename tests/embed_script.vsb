@@ -1,0 +1,16 @@
+-- Embedded script for Milestone L5 C host test
+
+global var host_ticks is 0
+
+fnc tick_task(start_val)
+    var cur is start_val
+    loop while true
+        host_ticks = host_ticks + 1
+        set cur to host_add_bonus(cur, 10)
+        var step is yield cur
+        if step == 0
+            return cur + 1000
+        cur = cur + step
+
+fnc main()
+    host_ticks = 100

@@ -53,6 +53,7 @@ static int starts_block(const char *str) {
     while (*str && isspace((unsigned char)*str)) str++;
     if (strncmp(str, "fnc ", 4) == 0) return 1;
     if (strncmp(str, "ft ", 3) == 0) return 1;
+    if (strncmp(str, "struct ", 7) == 0) return 1;
     if (strncmp(str, "if ", 3) == 0) return 1;
     if (strncmp(str, "else", 4) == 0) return 1;
     if (strncmp(str, "loop ", 5) == 0) return 1;

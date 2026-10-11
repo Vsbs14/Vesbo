@@ -29,10 +29,10 @@
 *.so.*
 *.dylib
 !vendor/raylib/lib/*.dll
-!raylib.dll
 
 # Executables
 /vesbo
+/tests/embed_host_test
 *.exe
 *.vbo
 *.out

@@ -89,21 +89,21 @@ size_t disassemble_instruction(Chunk *chunk, size_t offset) {
         }
 
         case OP_GET_GLOBAL: {
-            uint32_t idx = read_operand_at(chunk, offset + 1);
-            if (idx < chunk->strings_len) {
-                printf("%-20s %u (\"%s\")\n", "OP_GET_GLOBAL", idx, chunk->strings[idx]);
+            uint32_t slot = read_operand_at(chunk, offset + 1);
+            if (slot < chunk->globals_len) {
+                printf("%-20s slot %u (\"%s\")\n", "OP_GET_GLOBAL", slot, chunk->global_names[slot]);
             } else {
-                printf("%-20s %u\n", "OP_GET_GLOBAL", idx);
+                printf("%-20s slot %u\n", "OP_GET_GLOBAL", slot);
             }
             return offset + 5;
         }
 
         case OP_SET_GLOBAL: {
-            uint32_t idx = read_operand_at(chunk, offset + 1);
-            if (idx < chunk->strings_len) {
-                printf("%-20s %u (\"%s\")\n", "OP_SET_GLOBAL", idx, chunk->strings[idx]);
+            uint32_t slot = read_operand_at(chunk, offset + 1);
+            if (slot < chunk->globals_len) {
+                printf("%-20s slot %u (\"%s\")\n", "OP_SET_GLOBAL", slot, chunk->global_names[slot]);
             } else {
-                printf("%-20s %u\n", "OP_SET_GLOBAL", idx);
+                printf("%-20s slot %u\n", "OP_SET_GLOBAL", slot);
             }
             return offset + 5;
         }
@@ -179,6 +179,57 @@ size_t disassemble_instruction(Chunk *chunk, size_t offset) {
         case OP_SLICE:
             printf("%-20s\n", "OP_SLICE");
             return offset + 1;
+
+        case OP_NEW_STRUCT: {
+            uint32_t s_idx = read_operand_at(chunk, offset + 1);
+            uint32_t argc = read_operand_at(chunk, offset + 5);
+            const char *sname = (s_idx < chunk->structs_len) ? chunk->structs[s_idx].name : "unknown";
+            printf("%-20s [%u] %s (args: %u)\n", "OP_NEW_STRUCT", s_idx, sname, argc);
+            return offset + 9;
+        }
+
+        case OP_GET_FIELD: {
+            uint32_t f_idx = read_operand_at(chunk, offset + 1);
+            const char *fname = (f_idx < chunk->strings_len) ? chunk->strings[f_idx] : "unknown";
+            printf("%-20s .%s\n", "OP_GET_FIELD", fname);
+            return offset + 5;
+        }
+
+        case OP_SET_FIELD: {
+            uint32_t f_idx = read_operand_at(chunk, offset + 1);
+            const char *fname = (f_idx < chunk->strings_len) ? chunk->strings[f_idx] : "unknown";
+            printf("%-20s .%s\n", "OP_SET_FIELD", fname);
+            return offset + 5;
+        }
+
+        case OP_INVOKE: {
+            uint32_t m_idx = read_operand_at(chunk, offset + 1);
+            uint32_t argc = read_operand_at(chunk, offset + 5);
+            const char *mname = (m_idx < chunk->strings_len) ? chunk->strings[m_idx] : "unknown";
+            printf("%-20s .%s (args: %u)\n", "OP_INVOKE", mname, argc);
+            return offset + 9;
+        }
+
+        case OP_COROUTINE: {
+            uint32_t f_idx = read_operand_at(chunk, offset + 1);
+            uint32_t argc = read_operand_at(chunk, offset + 5);
+            if (f_idx < chunk->functions_len) {
+                printf("%-20s [%u] <%s> (args: %u)\n", "OP_COROUTINE", f_idx, chunk->functions[f_idx].name, argc);
+            } else {
+                printf("%-20s dynamic (args: %u)\n", "OP_COROUTINE", argc);
+            }
+            return offset + 9;
+        }
+
+        case OP_YIELD:
+            printf("%-20s\n", "OP_YIELD");
+            return offset + 1;
+
+        case OP_RESUME: {
+            uint32_t argc = read_operand_at(chunk, offset + 1);
+            printf("%-20s (args: %u)\n", "OP_RESUME", argc);
+            return offset + 5;
+        }
 
         case OP_JUMP: {
             uint32_t target = read_operand_at(chunk, offset + 1);
@@ -312,6 +363,21 @@ void disassemble_chunk(Chunk *chunk, const char *name) {
     printf("\n-- Constant Strings (%zu) --\n", chunk->strings_len);
     for (size_t i = 0; i < chunk->strings_len; i++) {
         printf("  [%zu] \"%s\"\n", i, chunk->strings[i]);
+    }
+
+    if (chunk->globals_len > 0) {
+        printf("\n-- Globals (%zu) --\n", chunk->globals_len);
+        for (size_t i = 0; i < chunk->globals_len; i++) {
+            printf("  [slot %zu] %s\n", i, chunk->global_names[i]);
+        }
+    }
+
+    if (chunk->structs_len > 0) {
+        printf("\n-- Structs (%zu) --\n", chunk->structs_len);
+        for (size_t i = 0; i < chunk->structs_len; i++) {
+            printf("  [%zu] struct %s (%d fields)\n",
+                   i, chunk->structs[i].name, chunk->structs[i].field_count);
+        }
     }
 
     printf("\n-- Functions (%zu) --\n", chunk->functions_len);

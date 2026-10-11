@@ -71,19 +71,19 @@ static Color parse_color(Value val) {
                 }
             }
         }
-    } else if (val.type == VAL_ARRAY) {
-        if (val.as.array.count >= 4) {
+    } else if (val.type == VAL_ARRAY && val.as.array) {
+        if (val.as.array->count >= 4) {
             return (Color){
-                (unsigned char)val.as.array.items[0].as.number,
-                (unsigned char)val.as.array.items[1].as.number,
-                (unsigned char)val.as.array.items[2].as.number,
-                (unsigned char)val.as.array.items[3].as.number
+                (unsigned char)val.as.array->items[0].as.number,
+                (unsigned char)val.as.array->items[1].as.number,
+                (unsigned char)val.as.array->items[2].as.number,
+                (unsigned char)val.as.array->items[3].as.number
             };
-        } else if (val.as.array.count == 3) {
+        } else if (val.as.array->count == 3) {
             return (Color){
-                (unsigned char)val.as.array.items[0].as.number,
-                (unsigned char)val.as.array.items[1].as.number,
-                (unsigned char)val.as.array.items[2].as.number,
+                (unsigned char)val.as.array->items[0].as.number,
+                (unsigned char)val.as.array->items[1].as.number,
+                (unsigned char)val.as.array->items[2].as.number,
                 255
             };
         }
@@ -547,11 +547,11 @@ int call_raylib_builtin(const char *name, Value *args, int arg_count, Value *out
             return -1;
         }
         Value arr = make_array_value();
-        value_array_push(&arr.as.array, make_number_value(args[0].as.number));
-        value_array_push(&arr.as.array, make_number_value(args[1].as.number));
-        value_array_push(&arr.as.array, make_number_value(args[2].as.number));
+        value_array_push(arr.as.array, make_number_value(args[0].as.number));
+        value_array_push(arr.as.array, make_number_value(args[1].as.number));
+        value_array_push(arr.as.array, make_number_value(args[2].as.number));
         double alpha = (arg_count >= 4) ? args[3].as.number : 255.0;
-        value_array_push(&arr.as.array, make_number_value(alpha));
+        value_array_push(arr.as.array, make_number_value(alpha));
         *out = arr;
         return 1;
     }
@@ -568,10 +568,10 @@ int call_raylib_builtin(const char *name, Value *args, int arg_count, Value *out
         if (alpha > 1.0f) alpha = 1.0f;
         Color faded = Fade(c, alpha);
         Value arr = make_array_value();
-        value_array_push(&arr.as.array, make_number_value(faded.r));
-        value_array_push(&arr.as.array, make_number_value(faded.g));
-        value_array_push(&arr.as.array, make_number_value(faded.b));
-        value_array_push(&arr.as.array, make_number_value(faded.a));
+        value_array_push(arr.as.array, make_number_value(faded.r));
+        value_array_push(arr.as.array, make_number_value(faded.g));
+        value_array_push(arr.as.array, make_number_value(faded.b));
+        value_array_push(arr.as.array, make_number_value(faded.a));
         *out = arr;
         return 1;
     }

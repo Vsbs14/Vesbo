@@ -10,6 +10,7 @@ typedef enum {
     TOKEN_VAR, TOKEN_IS, TOKEN_SET, TOKEN_TO, TOKEN_FT, TOKEN_GIVES,
     TOKEN_RETURN, TOKEN_IF, TOKEN_ELSE, TOKEN_LOOP, TOKEN_TILL, TOKEN_WHILE, TOKEN_FROM,
     TOKEN_THROUGH, TOKEN_AS, TOKEN_TRY, TOKEN_CATCH, TOKEN_OUTPUT, TOKEN_IMPORT,
+    TOKEN_STRUCT, TOKEN_YIELD,
     TOKEN_TRUE, TOKEN_FALSE, TOKEN_NONE, TOKEN_AND, TOKEN_OR, TOKEN_NOT,
 
     TOKEN_EQUALS,
@@ -28,6 +29,8 @@ typedef enum {
     TOKEN_RBRACE,       // }
     TOKEN_COLON,        // :
     TOKEN_COMMA,        // ,
+    TOKEN_DOT,          // .
+    TOKEN_ASSIGN,       // =
     TOKEN_PLUS,         // +
     TOKEN_MINUS,        // -
     TOKEN_STAR,         // *
@@ -47,6 +50,7 @@ typedef struct {
     char *lexeme;
     double number_val;
     int line;
+    int column;
 } Token;
 
 #endif

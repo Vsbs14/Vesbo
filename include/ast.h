@@ -12,6 +12,9 @@ typedef enum {
     EXPR_ARRAY,
     EXPR_MAP,
     EXPR_INDEX,       // arr[i]
+    EXPR_GET_FIELD,   // obj.field
+    EXPR_METHOD_CALL, // obj.method(args)
+    EXPR_YIELD,       // yield [expr]
     EXPR_BINARY,      // a + b, a equals b, a AND b, etc.
     EXPR_UNARY,       // NOT x, -x
     EXPR_CALL,        // fn(args)
@@ -20,7 +23,9 @@ typedef enum {
 typedef enum {
     STMT_VAR_DECL,
     STMT_ASSIGN,
-    STMT_INDEX_SET,    // set arr[i] to val / set map[k] to val
+    STMT_INDEX_SET,    // set arr[i] to val / arr[i] = val
+    STMT_SET_FIELD,    // set obj.field to val / obj.field = val
+    STMT_STRUCT_DECL,  // struct Name ...
     STMT_IMPORT,
     STMT_IF,
     STMT_LOOP_TILL,
@@ -81,6 +86,8 @@ typedef struct {
 struct Expr {
     ExprType type;
     int line;
+    int column;
+    char *file;
     union {
         double number_val;
         char *string_val;
@@ -92,6 +99,9 @@ struct Expr {
         struct { MapEntryList entries; } map;
 
         struct { Expr *collection; Expr *index; } index_expr;
+        struct { Expr *object; char *field_name; } get_field;
+        struct { Expr *object; char *method_name; ExprList args; } method_call;
+        struct { Expr *value; } yield_expr;
 
         struct { BinOp op; Expr *left; Expr *right; } binary;
 
@@ -104,18 +114,29 @@ struct Expr {
 struct Stmt {
     StmtType type;
     int line;
+    int column;
+    char *file;
     union {
         struct { char *name; Expr *value; int is_global; } var_decl;
 
         struct { char *name; Expr *value; } assign;
 
-        struct { char *name; Expr *index; Expr *value; } index_set;
+        struct { char *name; Expr *collection; Expr *index; Expr *value; } index_set;
+        struct { Expr *object; char *field_name; Expr *value; } set_field;
+
+        struct {
+            char *name;
+            StringList field_names;
+            ExprList field_defaults;
+            StmtList methods;
+        } struct_decl;
+
         struct { char *path; } import_stmt;
 
         struct {
             Expr *condition;
             StmtList then_branch;
-            StmtList else_branch; // empty if no else; may itself contain a single STMT_IF for "else if"
+            StmtList else_branch;
             int has_else;
         } if_stmt;
 
@@ -141,7 +162,7 @@ struct Stmt {
             StmtList body;
         } func_decl;
 
-        struct { Expr *value; } return_stmt; // value may be NULL for bare "return"
+        struct { Expr *value; } return_stmt;
 
         struct { Expr *value; } output_stmt;
 
@@ -155,6 +176,8 @@ struct Stmt {
     } as;
 };
 
+void ast_set_current_loc(const char *file, int line, int column);
+
 Expr *make_number_expr(double val, int line);
 Expr *make_string_expr(const char *val, int line);
 Expr *make_bool_expr(int val, int line);
@@ -163,6 +186,9 @@ Expr *make_ident_expr(const char *name, int line);
 Expr *make_array_expr(ExprList elements, int line);
 Expr *make_map_expr(MapEntryList entries, int line);
 Expr *make_index_expr(Expr *collection, Expr *index, int line);
+Expr *make_get_field_expr(Expr *object, const char *field_name, int line);
+Expr *make_method_call_expr(Expr *object, const char *method_name, ExprList args, int line);
+Expr *make_yield_expr(Expr *value, int line);
 Expr *make_binary_expr(BinOp op, Expr *left, Expr *right, int line);
 Expr *make_unary_expr(UnOp op, Expr *operand, int line);
 Expr *make_call_expr(const char *callee_name, ExprList args, int line);
@@ -170,6 +196,9 @@ Expr *make_call_expr(const char *callee_name, ExprList args, int line);
 Stmt *make_var_decl_stmt(const char *name, Expr *value, int is_global, int line);
 Stmt *make_assign_stmt(const char *name, Expr *value, int line);
 Stmt *make_index_set_stmt(const char *name, Expr *index, Expr *value, int line);
+Stmt *make_index_set_target_stmt(Expr *collection, Expr *index, Expr *value, int line);
+Stmt *make_set_field_stmt(Expr *object, const char *field_name, Expr *value, int line);
+Stmt *make_struct_decl_stmt(const char *name, StringList field_names, ExprList field_defaults, StmtList methods, int line);
 Stmt *make_import_stmt(char *path, int line);
 Stmt *make_if_stmt(Expr *condition, StmtList then_branch, StmtList else_branch, int has_else, int line);
 Stmt *make_loop_till_stmt(Expr *condition, StmtList body, int line);
@@ -193,6 +222,7 @@ void map_entry_list_add(MapEntryList *list, Expr *key, Expr *value);
 
 void string_list_init(StringList *list);
 void string_list_add(StringList *list, const char *str);
+void string_list_insert_first(StringList *list, const char *str);
 
 void free_expr(Expr *expr);
 void free_stmt(Stmt *stmt);
