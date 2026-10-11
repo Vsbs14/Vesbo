@@ -1,14 +1,14 @@
-- Getting Started
-  - [Overview & CLI](README.md)
+- 01 / overview
+  - [getting started & cli](README.md)
 
-- Language Reference
-  - [Language Guide](language-guide.md)
-  - [Coroutines & Game Scripting](coroutines.md)
-  - [Standard Library & Built-ins](stdlib.md)
+- 02 / language
+  - [syntax & types](language-guide.md)
+  - [coroutines](coroutines.md)
+  - [standard library](stdlib.md)
 
-- 2D Game Engine
-  - [Game Loop & Raylib API](game-engine.md)
+- 03 / game runtime
+  - [2d graphics & raylib](game-engine.md)
 
-- Engine & Internals
-  - [C Embedding (`libvesbo`) & VM](embedding.md)
-  - [Heap & Mark-Sweep GC Design](gc_design.md)
+- 04 / internals
+  - [c embedding & vm](embedding.md)
+  - [heap & mark-sweep gc](gc_design.md)

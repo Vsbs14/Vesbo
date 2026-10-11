@@ -1,25 +1,10 @@
 # Vesbo
 
-**Vesbo** is an English-readable programming language, stack-based bytecode virtual machine, embeddable C runtime (`libvesbo`), and 2D game scripting engine written in C99.
+Vesbo is an indentation-based scripting language written from scratch in C99. It includes a lexer, recursive-descent parser, tree-walking interpreter, bytecode compiler, stack-based virtual machine, mark-sweep garbage collector, C embedding API (`libvesbo`), and Raylib 2D bindings for writing games.
 
-📖 **[Read the Full Documentation →](https://vsbs14.github.io/Vesbo/)**
+**[Documentation (vsbs14.github.io/Vesbo) →](https://vsbs14.github.io/Vesbo/)**
 
----
-
-## Highlights
-
-- **Readable Indentation-Based Syntax**: Expressive English keywords (`is`, `equals`, `loop through`) mixed seamlessly with standard operators (`=`, `==`, `<=`) and string interpolation (`$"Hello, {name}!"`).
-- **Dual Execution Engine**: Run `.vsb` source directly in the tree-walking interpreter, execute in-memory on the stack VM (`--vm`), or compile self-contained `.vbo` (`VSB2`) bytecode binaries (`-c`).
-- **Built for Game Scripting**:
-  - **First-Class Stackful Coroutines** (`coroutine`, `yield`, `resume`) for per-frame entity behaviors, AI loops, and cutscenes.
-  - **Structs & Methods** (`struct`, `self`) with default field values and dot mutation.
-  - **2D Game Runtime (Raylib 6.0)** with built-in windowing, 2D rendering, keyboard/mouse input, and collision detection.
-- **Deterministic Mark-Sweep GC**: Unified `Obj` heap with reference semantics for arrays, maps, structs, and coroutines, interned strings, and `copy()` for explicit shallow cloning.
-- **Embeddable C API (`libvesbo`)**: Link `libvesbo.a` / `libvesbo.lib` into any C/C++ host or custom game engine via [`include/vesbo.h`](include/vesbo.h).
-
----
-
-## A Taste of Vesbo
+## Example
 
 ```vsb
 struct Vec2
@@ -34,8 +19,8 @@ struct Vec2
 fnc patrol_task(pos, step)
 	loop from 1 to 3 as tick
 		pos.move_by(step, 0)
-		yield $"Tick {tick}: ({pos.x}, {pos.y})"
-	return "patrol complete"
+		yield $"tick {tick}: ({pos.x}, {pos.y})"
+	return "done"
 
 fnc main()
 	var pos is Vec2(10, 20)
@@ -45,54 +30,48 @@ fnc main()
 		output resume(co)
 ```
 
----
-
 ## Quick Start
 
 | Task | Windows | Linux / macOS |
 | :--- | :--- | :--- |
-| **Build (`vesbo` + `libvesbo`)** | `build.bat` | `make` |
-| **Build without Raylib** | `build.bat --no-raylib` | `make NO_RAYLIB=1` |
-| **Run test suite** | `tests\run_tests.bat` | `./tests/run_tests.sh` |
-| **Run script (interpreter)** | `vesbo.exe script.vsb` | `./vesbo script.vsb` |
-| **Run script (bytecode VM)** | `vesbo.exe --vm script.vsb` | `./vesbo --vm script.vsb` |
-| **Compile to bytecode (`.vbo`)** | `vesbo.exe -c script.vsb -o out.vbo` | `./vesbo -c script.vsb -o out.vbo` |
-| **Run compiled `.vbo`** | `vesbo.exe out.vbo` | `./vesbo out.vbo` |
-| **Interactive REPL** | `vesbo.exe` | `./vesbo` |
-| **Disassemble bytecode** | `vesbo.exe -d script.vsb` | `./vesbo -d script.vsb` |
-| **Play Breakout game** | `games\breakout\run.bat` | `./games/breakout/run.sh` |
+| Build `vesbo` + `libvesbo` | `build.bat` | `make` |
+| Build without Raylib | `build.bat --no-raylib` | `make NO_RAYLIB=1` |
+| Run test suite | `tests\run_tests.bat` | `./tests/run_tests.sh` |
+| Run script (interpreter) | `vesbo.exe script.vsb` | `./vesbo script.vsb` |
+| Run script (bytecode VM) | `vesbo.exe --vm script.vsb` | `./vesbo --vm script.vsb` |
+| Compile to `.vbo` bytecode | `vesbo.exe -c script.vsb -o out.vbo` | `./vesbo -c script.vsb -o out.vbo` |
+| Run compiled `.vbo` | `vesbo.exe out.vbo` | `./vesbo out.vbo` |
+| Interactive REPL | `vesbo.exe` | `./vesbo` |
+| Disassemble bytecode | `vesbo.exe -d script.vsb` | `./vesbo -d script.vsb` |
+| Run Breakout game | `games\breakout\run.bat` | `./games/breakout/run.sh` |
 
-### Platform Prerequisites
+### Building
 
-- **Windows**: MSVC (`cl`), MinGW-w64 (`gcc`), or LLVM (`clang`). Raylib 6.0 is pre-vendored in `vendor/raylib/`.
-- **Linux**: `gcc` or `clang` + `make`. Optional for 2D graphics: `libraylib-dev` and `pkg-config` (falls back to headless stub automatically if absent).
-- **macOS**: Xcode Command Line Tools (`xcode-select --install`). Optional for 2D graphics: `brew install raylib pkg-config`.
-
----
+- **Windows**: Requires MSVC (`cl`), MinGW-w64 (`gcc`), or LLVM (`clang`). Raylib 6.0 headers and libraries are pre-vendored in `vendor/raylib/`.
+- **Linux**: Requires `gcc` or `clang` and `make`. For 2D graphics, install `libraylib-dev` and `pkg-config` (if absent, `make` falls back to a headless stub automatically).
+- **macOS**: Requires Xcode Command Line Tools (`xcode-select --install`). For 2D graphics, run `brew install raylib pkg-config`.
 
 ## Documentation
 
-Full guides and API references live in [`docs/`](docs/) and power the [GitHub Pages documentation site](https://vsbs14.github.io/Vesbo/):
+The full language and runtime reference is hosted at **[vsbs14.github.io/Vesbo](https://vsbs14.github.io/Vesbo/)** and lives in [`docs/`](docs/):
 
-- **[Overview & CLI Reference](docs/README.md)** — CLI flags (`--vm`, `-c`, `-d`, `--profile`, `--gc-stress`) and interactive REPL usage.
-- **[Language Guide](docs/language-guide.md)** — Values, reference semantics (`copy()`), strings, loops, functions, structs & methods (`self`), arrays, maps, modules (`import`), and `try`/`catch`.
-- **[Coroutines & Game Scripting](docs/coroutines.md)** — Stackful coroutines (`coroutine`, `yield`, `resume`) and per-frame game entity patterns.
-- **[2D Game Engine & Raylib API](docs/game-engine.md)** — Windowing, 2D drawing primitives, input queries, collisions, and running Breakout.
-- **[Standard Library & Built-ins](docs/stdlib.md)** — All built-in functions and pure-Vesbo `std/math`, `std/strings`, and `std/lists` modules.
-- **[C Embedding (`libvesbo`) & Bytecode VM](docs/embedding.md)** — Embedding `VesboVM` in C/C++ applications (`include/vesbo.h`) and `VSB2` bytecode format.
-- **[Heap & Mark-Sweep GC Design](docs/gc_design.md)** — Intrusive `Obj` header, string interning, and garbage collector architecture.
+- [Getting Started & CLI Reference](docs/README.md) — CLI flags (`--vm`, `-c`, `-d`, `--profile`, `--gc-stress`) and REPL usage.
+- [Language Guide](docs/language-guide.md) — Variables, reference semantics (`copy()`), strings, control flow, functions, structs & methods (`self`), arrays, maps, `import`, and `try`/`catch`.
+- [Coroutines](docs/coroutines.md) — Stackful coroutines (`coroutine`, `yield`, `resume`) and per-frame entity state machines.
+- [2D Graphics & Raylib API](docs/game-engine.md) — Window loop, 2D primitives, input handling, collisions, and Breakout.
+- [Standard Library & Built-ins](docs/stdlib.md) — Built-in runtime functions and `std/math`, `std/strings`, and `std/lists`.
+- [C Embedding (`libvesbo`) & VM](docs/embedding.md) — Embedding `VesboVM` in C/C++ applications (`include/vesbo.h`) and `VSB2` bytecode layout.
+- [Heap & Mark-Sweep GC Design](docs/gc_design.md) — `Obj` representation, string interning, and garbage collection.
 
----
-
-## Repository Structure
+## Directory Layout
 
 ```text
-include/     Public C headers (vesbo.h, value.h, vm.h, bytecode.h, ast.h, etc.)
+include/     C headers (vesbo.h, value.h, vm.h, bytecode.h, ast.h, etc.)
 src/         Lexer, parser, AST, GC/heap, interpreter, compiler, VM, REPL, Raylib bindings, C API
-std/         Standard library modules written in pure Vesbo (math, strings, lists)
-docs/        Documentation site (GitHub Pages) & technical design docs
-games/       Games written in pure Vesbo (Breakout)
-examples/    Example Vesbo scripts
-benchmarks/  AST vs. Bytecode VM performance benchmark suite (benchmark.vsb)
-tests/       Automated regression suites, C embedding host test, and test runners
+std/         Standard library modules written in Vesbo (math, strings, lists)
+docs/        Documentation site (GitHub Pages) and GC design notes
+games/       Breakout game written in Vesbo
+examples/    Sample scripts
+benchmarks/  Interpreter vs. bytecode VM benchmark suite (benchmark.vsb)
+tests/       Automated regression tests, C embedding host test, and test runners
 ```
