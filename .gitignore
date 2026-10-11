@@ -32,6 +32,7 @@
 !raylib.dll
 
 # Executables
+/vesbo
 *.exe
 *.vbo
 *.out

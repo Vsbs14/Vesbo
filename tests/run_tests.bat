@@ -220,6 +220,19 @@ findstr /x /c:"Hello, Vesbo!" "%OUTPUT%" >nul || goto :failed
 findstr /x /c:"The answer is: 42" "%OUTPUT%" >nul || goto :failed
 del "%OUTPUT%.vbo" >nul 2>nul
 
+REM Test Calculator example in interpreter
+(echo add& echo 10& echo 5& echo quit) | "%ROOT%\vesbo.exe" "%ROOT%\examples\calculator.vsb" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"15" "%OUTPUT%" >nul || goto :failed
+
+REM Test Calculator example in bytecode VM
+"%ROOT%\vesbo.exe" -c "%ROOT%\examples\calculator.vsb" -o "%OUTPUT%.vbo" >nul 2>&1
+if errorlevel 1 goto :failed
+(echo add& echo 10& echo 5& echo quit) | "%ROOT%\vesbo.exe" "%OUTPUT%.vbo" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"15" "%OUTPUT%" >nul || goto :failed
+del "%OUTPUT%.vbo" >nul 2>nul
+
 del "%OUTPUT%" >nul 2>nul
 echo All Vesbo smoke tests passed.
 exit /b 0

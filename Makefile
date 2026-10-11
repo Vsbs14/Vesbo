@@ -59,7 +59,10 @@ endif
 $(TARGET): $(SRC)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $(TARGET) $(SRC) $(LDLIBS)
 
-clean:
-	rm -f $(TARGET) $(TARGET).exe *.vbo tests/*.vbo
+test: $(TARGET)
+	./tests/run_tests.sh
 
-.PHONY: clean
+clean:
+	rm -f $(TARGET) $(TARGET).exe *.vbo tests/*.vbo games/breakout/*.vbo
+
+.PHONY: clean test

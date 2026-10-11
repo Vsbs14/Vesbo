@@ -45,7 +45,7 @@ if "%NO_RAYLIB%"=="1" (
     cl /MD /nologo /W4 /D_CRT_SECURE_NO_WARNINGS /DNO_RAYLIB /Iinclude /Fe:vesbo.exe %SOURCES%
     if errorlevel 1 exit /b 1
     del *.obj >nul 2>nul
-    echo Built vesbo.exe with MSVC (without Raylib).
+    echo Built vesbo.exe with MSVC ^(without Raylib^).
     exit /b 0
 )
 cl /MD /nologo /W4 /D_CRT_SECURE_NO_WARNINGS /Iinclude /Ivendor\raylib\include /Fe:vesbo.exe %SOURCES% /link /LIBPATH:vendor\raylib\lib raylib.lib user32.lib gdi32.lib winmm.lib shell32.lib
@@ -58,7 +58,7 @@ exit /b 0
 if "%NO_RAYLIB%"=="1" (
     gcc -Wall -Wextra -DNO_RAYLIB -Iinclude -o vesbo.exe %SOURCES%
     if errorlevel 1 exit /b 1
-    echo Built vesbo.exe with GCC (without Raylib).
+    echo Built vesbo.exe with GCC ^(without Raylib^).
     exit /b 0
 )
 gcc -Wall -Wextra -Iinclude -Ivendor/raylib/include -o vesbo.exe %SOURCES% -Lvendor/raylib/lib -lraylib -lopengl32 -lgdi32 -lwinmm
@@ -70,7 +70,7 @@ exit /b 0
 if "%NO_RAYLIB%"=="1" (
     clang -Wall -Wextra -DNO_RAYLIB -Iinclude -o vesbo.exe %SOURCES%
     if errorlevel 1 exit /b 1
-    echo Built vesbo.exe with Clang (without Raylib).
+    echo Built vesbo.exe with Clang ^(without Raylib^).
     exit /b 0
 )
 clang -Wall -Wextra -Iinclude -Ivendor/raylib/include -o vesbo.exe %SOURCES% -Lvendor/raylib/lib -lraylib -lopengl32 -lgdi32 -lwinmm

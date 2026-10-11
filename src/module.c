@@ -1,3 +1,7 @@
+#ifndef _WIN32
+#define _DEFAULT_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
 #include "../include/module.h"
 #include "../include/lexer.h"
 #include "../include/parser.h"
@@ -12,7 +16,7 @@ static char **imported_modules = NULL;
 static int imported_count = 0;
 static int imported_cap = 0;
 
-static char current_file_path[1024] = {0};
+static char current_file_path[4096] = {0};
 
 void module_system_init(void) {
     module_system_cleanup();
@@ -44,20 +48,20 @@ const char *module_get_current_file(void) {
 }
 
 static char *get_canonical_path(const char *path) {
-    char resolved[1024];
 #ifdef _WIN32
+    char resolved[4096];
     if (!_fullpath(resolved, path, sizeof(resolved))) return NULL;
     for (char *p = resolved; *p; p++) {
         if (*p == '/') *p = '\\';
         *p = (char)tolower((unsigned char)*p);
     }
-#else
-    if (!realpath(path, resolved)) return NULL;
-#endif
     size_t len = strlen(resolved);
     char *copy = malloc(len + 1);
     if (copy) strcpy(copy, resolved);
     return copy;
+#else
+    return realpath(path, NULL);
+#endif
 }
 
 static int file_exists_at(const char *path) {
