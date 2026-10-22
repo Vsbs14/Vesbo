@@ -1,0 +1,141 @@
+-- Comprehensive audit test for new features and bug fixes:
+-- 1. break and continue across all loops
+-- 2. compound assignments (+=, -=, *=, /=)
+-- 3. slice and substring (strings & arrays, negative indices)
+-- 4. and/or short-circuiting
+-- 5. standard library split/join and math functions
+
+import "std/strings"
+import "std/math"
+
+struct Point
+    var x is 0
+    var y is 0
+
+fnc test_break_continue()
+    -- 1. loop while
+    var sum_while is 0
+    var i is 0
+    loop while i < 10
+        set i to i + 1
+        if i == 3
+            continue
+        if i == 7
+            break
+        set sum_while to sum_while + i
+    output "while_break_cont:" + string(sum_while)
+
+    -- 2. loop till
+    var sum_till is 0
+    var j is 0
+    loop till j >= 10
+        set j to j + 1
+        if j == 2
+            continue
+        if j == 6
+            break
+        set sum_till to sum_till + j
+    output "till_break_cont:" + string(sum_till)
+
+    -- 3. loop range
+    var sum_range is 0
+    loop from 1 to 10 as r
+        if r % 2 == 0
+            continue
+        if r > 6
+            break
+        set sum_range to sum_range + r
+    output "range_break_cont:" + string(sum_range)
+
+    -- 4. loop through
+    var items is ["a", "skip", "b", "stop", "c"]
+    var acc is ""
+    loop through items as item
+        if item == "skip"
+            continue
+        if item == "stop"
+            break
+        set acc to acc + item
+    output "through_break_cont:" + acc
+
+fnc test_compound_assignments()
+    -- Variable
+    var x is 100
+    x += 50
+    x -= 20
+    x *= 2
+    x /= 10
+    output "var_compound:" + string(x)
+
+    -- String concatenation via +=
+    var s is "hello"
+    s += " "
+    s += "world"
+    output "str_compound:" + s
+
+    -- Struct field
+    var p is Point(10, 20)
+    p.x += 5
+    p.y *= 3
+    output "struct_compound:" + string(p.x) + ":" + string(p.y)
+
+    -- Array indexing
+    var arr is [10, 20, 30]
+    arr[1] += 5
+    arr[2] *= 2
+    output "array_compound:" + string(arr[1]) + ":" + string(arr[2])
+
+    -- Map indexing
+    var m is {"counter": 10}
+    m["counter"] += 15
+    output "map_compound:" + string(m["counter"])
+
+fnc test_slice()
+    -- String slicing
+    var str is "abcdef"
+    output "str_slice_basic:" + slice(str, 1, 4)
+    output "str_slice_no_end:" + slice(str, 2)
+    output "str_slice_neg_start:" + slice(str, -3)
+    output "str_slice_neg_end:" + slice(str, 1, -1)
+    output "str_substring:" + substring(str, 0, 3)
+
+    -- Array slicing
+    var a is [10, 20, 30, 40, 50]
+    var sub1 is slice(a, 1, 4)
+    output "arr_slice_basic:" + string(length(sub1)) + ":" + string(sub1[0]) + ":" + string(sub1[2])
+    var sub2 is slice(a, -2)
+    output "arr_slice_neg:" + string(length(sub2)) + ":" + string(sub2[0]) + ":" + string(sub2[1])
+
+fnc test_short_circuit()
+    -- 'and' short-circuit: right side should not execute if left is false
+    var a is none
+    var safe_and is false
+    if a != none and a[0] == 1
+        set safe_and to true
+    output "safe_and:" + string(safe_and)
+
+    -- 'or' short-circuit: right side should not execute if left is true
+    var safe_or is false
+    if a == none or a[0] == 1
+        set safe_or to true
+    output "safe_or:" + string(safe_or)
+
+fnc test_stdlib_parity()
+    -- Multi-char split via stdlib
+    var parts is split("foo::bar::baz", "::")
+    output "split_multichar:" + string(length(parts)) + ":" + parts[0] + ":" + parts[1] + ":" + parts[2]
+    var rejoined is join(parts, " - ")
+    output "rejoined:" + rejoined
+
+    -- Math functions
+    output "math_clamp:" + string(clamp(15, 0, 10))
+    output "math_sign:" + string(sign(-42))
+    output "math_pow:" + string(pow(2, 5))
+
+fnc main()
+    test_break_continue()
+    test_compound_assignments()
+    test_slice()
+    test_short_circuit()
+    test_stdlib_parity()
+    output "AUDIT_TESTS_PASS"

@@ -171,6 +171,8 @@ static void build_interp_stack_trace(const char *message) {
 typedef enum {
     SIGNAL_NONE,
     SIGNAL_RETURN,
+    SIGNAL_BREAK,
+    SIGNAL_CONTINUE,
     SIGNAL_ERROR,
 } Signal;
 
@@ -192,6 +194,22 @@ static ExecResult exec_return(Value v) {
     ExecResult r;
     r.signal = SIGNAL_RETURN;
     r.value = v;
+    r.error_message = NULL;
+    return r;
+}
+
+static ExecResult exec_break(void) {
+    ExecResult r;
+    r.signal = SIGNAL_BREAK;
+    r.value = make_none_value();
+    r.error_message = NULL;
+    return r;
+}
+
+static ExecResult exec_continue(void) {
+    ExecResult r;
+    r.signal = SIGNAL_CONTINUE;
+    r.value = make_none_value();
     r.error_message = NULL;
     return r;
 }
@@ -477,6 +495,10 @@ static Value call_user_function(FuncDef *fn, Value *args, int arg_count, Environ
         *result = body_result;
         return make_none_value();
     }
+    if (body_result.signal == SIGNAL_BREAK || body_result.signal == SIGNAL_CONTINUE) {
+        *result = exec_error("'break' or 'continue' outside of loop");
+        return make_none_value();
+    }
     if (body_result.signal == SIGNAL_RETURN) {
         return body_result.value;
     }
@@ -730,6 +752,10 @@ static Value eval_method_call(Expr *expr, Environment *env, ExecResult *result) 
 
     if (body_result.signal == SIGNAL_ERROR) {
         *result = body_result;
+        return make_none_value();
+    }
+    if (body_result.signal == SIGNAL_BREAK || body_result.signal == SIGNAL_CONTINUE) {
+        *result = exec_error("'break' or 'continue' outside of loop");
         return make_none_value();
     }
     if (body_result.signal == SIGNAL_RETURN) {
@@ -1108,6 +1134,8 @@ static ExecResult exec_stmt_inner(Stmt *stmt, Environment *env) {
                 env_push_scope(env);
                 ExecResult r = exec_block(stmt->as.loop_till.body, env);
                 env_pop_scope(env);
+                if (r.signal == SIGNAL_BREAK) break;
+                if (r.signal == SIGNAL_CONTINUE) continue;
                 if (r.signal != SIGNAL_NONE) return r;
             }
             return exec_none();
@@ -1124,6 +1152,8 @@ static ExecResult exec_stmt_inner(Stmt *stmt, Environment *env) {
                 env_push_scope(env);
                 ExecResult r = exec_block(stmt->as.loop_while.body, env);
                 env_pop_scope(env);
+                if (r.signal == SIGNAL_BREAK) break;
+                if (r.signal == SIGNAL_CONTINUE) continue;
                 if (r.signal != SIGNAL_NONE) return r;
             }
             return exec_none();
@@ -1142,6 +1172,8 @@ static ExecResult exec_stmt_inner(Stmt *stmt, Environment *env) {
                 env_declare(env, stmt->as.loop_range.var_name, make_number_value(i), 0);
                 ExecResult r = exec_block(stmt->as.loop_range.body, env);
                 env_pop_scope(env);
+                if (r.signal == SIGNAL_BREAK) break;
+                if (r.signal == SIGNAL_CONTINUE) continue;
                 if (r.signal != SIGNAL_NONE) return r;
             }
             return exec_none();
@@ -1156,6 +1188,8 @@ static ExecResult exec_stmt_inner(Stmt *stmt, Environment *env) {
                     env_declare(env, stmt->as.loop_through.item_name, collection.as.array->items[i], 0);
                     ExecResult r = exec_block(stmt->as.loop_through.body, env);
                     env_pop_scope(env);
+                    if (r.signal == SIGNAL_BREAK) break;
+                    if (r.signal == SIGNAL_CONTINUE) continue;
                     if (r.signal != SIGNAL_NONE) return r;
                 }
             } else if (collection.type == VAL_STRING) {
@@ -1166,6 +1200,8 @@ static ExecResult exec_stmt_inner(Stmt *stmt, Environment *env) {
                     env_declare(env, stmt->as.loop_through.item_name, make_string_value_len(ch_str, 1), 0);
                     ExecResult r = exec_block(stmt->as.loop_through.body, env);
                     env_pop_scope(env);
+                    if (r.signal == SIGNAL_BREAK) break;
+                    if (r.signal == SIGNAL_CONTINUE) continue;
                     if (r.signal != SIGNAL_NONE) return r;
                 }
             } else {
@@ -1186,6 +1222,12 @@ static ExecResult exec_stmt_inner(Stmt *stmt, Environment *env) {
             if (result.signal != SIGNAL_NONE) return result;
             return exec_return(v);
         }
+
+        case STMT_BREAK:
+            return exec_break();
+
+        case STMT_CONTINUE:
+            return exec_continue();
 
         case STMT_OUTPUT: {
             Value v = eval_expr(stmt->as.output_stmt.value, env, &result);
@@ -1241,7 +1283,13 @@ void interpret_program(StmtList program) {
         if (program.items[i]->type == STMT_IMPORT) {
             ExecResult top_result = exec_stmt(program.items[i], &env);
             if (top_result.signal == SIGNAL_ERROR) {
-                fprintf(stderr, "Uncaught error: %s\n%s\n", top_result.error_message, vesbo_get_last_stack_trace());
+                const char *trace = vesbo_get_last_stack_trace();
+                if (trace && trace[0] != '\0') {
+                    fprintf(stderr, "%s\n", trace);
+                } else {
+                    fprintf(stderr, "Runtime error: %s\n", top_result.error_message);
+                }
+                if (top_result.error_message) free(top_result.error_message);
                 exit(1);
             }
         } else if (program.items[i]->type == STMT_FUNC_DECL) {
@@ -1250,7 +1298,13 @@ void interpret_program(StmtList program) {
             ExecResult sr = exec_none();
             register_struct_stmt(program.items[i], &env, &sr);
             if (sr.signal == SIGNAL_ERROR) {
-                fprintf(stderr, "Uncaught error: %s\n%s\n", sr.error_message, vesbo_get_last_stack_trace());
+                const char *trace = vesbo_get_last_stack_trace();
+                if (trace && trace[0] != '\0') {
+                    fprintf(stderr, "%s\n", trace);
+                } else {
+                    fprintf(stderr, "Runtime error: %s\n", sr.error_message);
+                }
+                if (sr.error_message) free(sr.error_message);
                 exit(1);
             }
         }
@@ -1261,11 +1315,21 @@ void interpret_program(StmtList program) {
         if (st != STMT_FUNC_DECL && st != STMT_STRUCT_DECL && st != STMT_IMPORT) {
             ExecResult top_result = exec_stmt(program.items[i], &env);
             if (top_result.signal == SIGNAL_ERROR) {
-                fprintf(stderr, "Uncaught error: %s\n%s\n", top_result.error_message, vesbo_get_last_stack_trace());
+                const char *trace = vesbo_get_last_stack_trace();
+                if (trace && trace[0] != '\0') {
+                    fprintf(stderr, "%s\n", trace);
+                } else {
+                    fprintf(stderr, "Runtime error: %s\n", top_result.error_message);
+                }
+                if (top_result.error_message) free(top_result.error_message);
                 exit(1);
             }
             if (top_result.signal == SIGNAL_RETURN) {
                 fprintf(stderr, "Error: return is only valid inside a function.\n");
+                exit(1);
+            }
+            if (top_result.signal == SIGNAL_BREAK || top_result.signal == SIGNAL_CONTINUE) {
+                fprintf(stderr, "Error: break/continue is only valid inside a loop.\n");
                 exit(1);
             }
         }
@@ -1273,8 +1337,11 @@ void interpret_program(StmtList program) {
 
     FuncDef *main_fn = find_function("main");
     if (!main_fn) {
-        fprintf(stderr, "Error: no 'fnc main()' function found.\n");
-        exit(1);
+        env_free(&env);
+        clear_functions();
+        free_stmt_list(&program);
+        value_cleanup();
+        return;
     }
 
     if (main_fn->decl_stmt) {
@@ -1287,7 +1354,13 @@ void interpret_program(StmtList program) {
     call_user_function(main_fn, NULL, 0, &env, &result);
 
     if (result.signal == SIGNAL_ERROR) {
-        fprintf(stderr, "Uncaught error: %s\n%s\n", result.error_message, vesbo_get_last_stack_trace());
+        const char *trace = vesbo_get_last_stack_trace();
+        if (trace && trace[0] != '\0') {
+            fprintf(stderr, "%s\n", trace);
+        } else {
+            fprintf(stderr, "Runtime error: %s\n", result.error_message);
+        }
+        if (result.error_message) free(result.error_message);
         exit(1);
     }
 
@@ -1302,7 +1375,8 @@ void interpret_repl_program(StmtList program, Environment *env) {
         if (program.items[i]->type == STMT_IMPORT) {
             ExecResult r = exec_stmt(program.items[i], env);
             if (r.signal == SIGNAL_ERROR) {
-                fprintf(stderr, "Runtime error: %s\n", r.error_message);
+                fprintf(stderr, "Runtime error: %s\n", r.error_message ? r.error_message : "");
+                if (r.error_message) free(r.error_message);
                 return;
             }
         } else if (program.items[i]->type == STMT_FUNC_DECL) {
@@ -1311,7 +1385,8 @@ void interpret_repl_program(StmtList program, Environment *env) {
             ExecResult sr = exec_none();
             register_struct_stmt(program.items[i], env, &sr);
             if (sr.signal == SIGNAL_ERROR) {
-                fprintf(stderr, "Runtime error: %s\n", sr.error_message);
+                fprintf(stderr, "Runtime error: %s\n", sr.error_message ? sr.error_message : "");
+                if (sr.error_message) free(sr.error_message);
                 return;
             }
         }
@@ -1326,7 +1401,8 @@ void interpret_repl_program(StmtList program, Environment *env) {
             ExecResult r = exec_none();
             Value v = eval_expr(s->as.expr_stmt.expr, env, &r);
             if (r.signal == SIGNAL_ERROR) {
-                fprintf(stderr, "Runtime error: %s\n", r.error_message);
+                fprintf(stderr, "Runtime error: %s\n", r.error_message ? r.error_message : "");
+                if (r.error_message) free(r.error_message);
                 gc_restore_roots(saved_roots);
                 return;
             }
@@ -1339,11 +1415,16 @@ void interpret_repl_program(StmtList program, Environment *env) {
         } else {
             ExecResult r = exec_stmt(s, env);
             if (r.signal == SIGNAL_ERROR) {
-                fprintf(stderr, "Runtime error: %s\n", r.error_message);
+                fprintf(stderr, "Runtime error: %s\n", r.error_message ? r.error_message : "");
+                if (r.error_message) free(r.error_message);
                 return;
             }
             if (r.signal == SIGNAL_RETURN) {
                 fprintf(stderr, "Error: return is only valid inside a function.\n");
+                return;
+            }
+            if (r.signal == SIGNAL_BREAK || r.signal == SIGNAL_CONTINUE) {
+                fprintf(stderr, "Error: break/continue is only valid inside a loop.\n");
                 return;
             }
         }

@@ -76,7 +76,7 @@ static int file_exists_at(const char *path) {
 char *module_resolve_path(const char *raw_path, const char *relative_to_file) {
     if (!raw_path || raw_path[0] == '\0') return NULL;
 
-    char candidate[4096];
+    char candidate[8192];
     size_t raw_len = strlen(raw_path);
     int has_vsb_ext = (raw_len >= 4 && strcmp(raw_path + raw_len - 4, ".vsb") == 0);
 
@@ -88,7 +88,7 @@ char *module_resolve_path(const char *raw_path, const char *relative_to_file) {
 
         if (last_slash) {
             size_t dir_len = (size_t)(last_slash - relative_to_file);
-            char dir[1024];
+            char dir[4096];
             if (dir_len < sizeof(dir)) {
                 strncpy(dir, relative_to_file, dir_len);
                 dir[dir_len] = '\0';

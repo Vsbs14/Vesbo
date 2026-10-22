@@ -311,34 +311,8 @@ static uint32_t read_operand(VM *vm) {
     return value;
 }
 
-static Value to_number(Value v) {
-    if (v.type == VAL_NUMBER) return v;
-    if (v.type == VAL_STRING) {
-        char *endptr;
-        double num = strtod(v.as.string, &endptr);
-        if (*endptr == '\0' || (*endptr == ' ' && *(endptr+1) == '\0')) {
-            return make_number_value(num);
-        }
-        return make_number_value(0.0);
-    }
-    if (v.type == VAL_BOOL) {
-        return make_number_value(v.as.boolean ? 1.0 : 0.0);
-    }
-    return make_number_value(0.0);
-}
-
 static Value to_bool(Value v) {
-    if (v.type == VAL_BOOL) return v;
-    if (v.type == VAL_NUMBER) {
-        return make_bool_value(v.as.number != 0.0);
-    }
-    if (v.type == VAL_STRING) {
-        return make_bool_value(strlen(v.as.string) > 0);
-    }
-    if (v.type == VAL_NONE) {
-        return make_bool_value(0);
-    }
-    return make_bool_value(1);
+    return make_bool_value(value_is_truthy(v));
 }
 
 static void vm_build_stack_trace(VM *vm, const char *message, uint8_t *err_ip) {
@@ -745,8 +719,10 @@ int vm_execute(VM *vm) {
             case OP_SUBTRACT: {
                 Value right = vm_pop(vm);
                 Value left = vm_pop(vm);
-                left = to_number(left);
-                right = to_number(right);
+                if (left.type != VAL_NUMBER || right.type != VAL_NUMBER) {
+                    vm_raise_at(vm, op_ip, "'-' requires two numbers");
+                    break;
+                }
                 vm_push(vm, make_number_value(left.as.number - right.as.number));
                 break;
             }
@@ -754,8 +730,10 @@ int vm_execute(VM *vm) {
             case OP_MULTIPLY: {
                 Value right = vm_pop(vm);
                 Value left = vm_pop(vm);
-                left = to_number(left);
-                right = to_number(right);
+                if (left.type != VAL_NUMBER || right.type != VAL_NUMBER) {
+                    vm_raise_at(vm, op_ip, "'*' requires two numbers");
+                    break;
+                }
                 vm_push(vm, make_number_value(left.as.number * right.as.number));
                 break;
             }
@@ -763,8 +741,10 @@ int vm_execute(VM *vm) {
             case OP_DIVIDE: {
                 Value right = vm_pop(vm);
                 Value left = vm_pop(vm);
-                left = to_number(left);
-                right = to_number(right);
+                if (left.type != VAL_NUMBER || right.type != VAL_NUMBER) {
+                    vm_raise_at(vm, op_ip, "'/' requires two numbers");
+                    break;
+                }
                 if (right.as.number == 0.0) {
                     vm_raise_at(vm, op_ip, "division by zero");
                     break;
@@ -776,8 +756,10 @@ int vm_execute(VM *vm) {
             case OP_MODULO: {
                 Value right = vm_pop(vm);
                 Value left = vm_pop(vm);
-                left = to_number(left);
-                right = to_number(right);
+                if (left.type != VAL_NUMBER || right.type != VAL_NUMBER) {
+                    vm_raise_at(vm, op_ip, "'%' requires two numbers");
+                    break;
+                }
                 if (right.as.number == 0.0) {
                     vm_raise_at(vm, op_ip, "division by zero");
                     break;
@@ -788,7 +770,10 @@ int vm_execute(VM *vm) {
 
             case OP_NEGATE: {
                 Value v = vm_pop(vm);
-                v = to_number(v);
+                if (v.type != VAL_NUMBER) {
+                    vm_raise_at(vm, op_ip, "unary '-' requires a number");
+                    break;
+                }
                 vm_push(vm, make_number_value(-v.as.number));
                 break;
             }
@@ -810,8 +795,10 @@ int vm_execute(VM *vm) {
             case OP_LESS_THAN: {
                 Value right = vm_pop(vm);
                 Value left = vm_pop(vm);
-                left = to_number(left);
-                right = to_number(right);
+                if (left.type != VAL_NUMBER || right.type != VAL_NUMBER) {
+                    vm_raise_at(vm, op_ip, "comparison operators require two numbers");
+                    break;
+                }
                 vm_push(vm, make_bool_value(left.as.number < right.as.number));
                 break;
             }
@@ -819,8 +806,10 @@ int vm_execute(VM *vm) {
             case OP_GREATER_THAN: {
                 Value right = vm_pop(vm);
                 Value left = vm_pop(vm);
-                left = to_number(left);
-                right = to_number(right);
+                if (left.type != VAL_NUMBER || right.type != VAL_NUMBER) {
+                    vm_raise_at(vm, op_ip, "comparison operators require two numbers");
+                    break;
+                }
                 vm_push(vm, make_bool_value(left.as.number > right.as.number));
                 break;
             }
@@ -828,8 +817,10 @@ int vm_execute(VM *vm) {
             case OP_LESS_THAN_EQUAL: {
                 Value right = vm_pop(vm);
                 Value left = vm_pop(vm);
-                left = to_number(left);
-                right = to_number(right);
+                if (left.type != VAL_NUMBER || right.type != VAL_NUMBER) {
+                    vm_raise_at(vm, op_ip, "comparison operators require two numbers");
+                    break;
+                }
                 vm_push(vm, make_bool_value(left.as.number <= right.as.number));
                 break;
             }
@@ -837,8 +828,10 @@ int vm_execute(VM *vm) {
             case OP_GREATER_THAN_EQUAL: {
                 Value right = vm_pop(vm);
                 Value left = vm_pop(vm);
-                left = to_number(left);
-                right = to_number(right);
+                if (left.type != VAL_NUMBER || right.type != VAL_NUMBER) {
+                    vm_raise_at(vm, op_ip, "comparison operators require two numbers");
+                    break;
+                }
                 vm_push(vm, make_bool_value(left.as.number >= right.as.number));
                 break;
             }
@@ -846,25 +839,20 @@ int vm_execute(VM *vm) {
             case OP_AND: {
                 Value right = vm_pop(vm);
                 Value left = vm_pop(vm);
-                left = to_bool(left);
-                right = to_bool(right);
-                vm_push(vm, make_bool_value(left.as.boolean && right.as.boolean));
+                vm_push(vm, make_bool_value(value_is_truthy(left) && value_is_truthy(right)));
                 break;
             }
 
             case OP_OR: {
                 Value right = vm_pop(vm);
                 Value left = vm_pop(vm);
-                left = to_bool(left);
-                right = to_bool(right);
-                vm_push(vm, make_bool_value(left.as.boolean || right.as.boolean));
+                vm_push(vm, make_bool_value(value_is_truthy(left) || value_is_truthy(right)));
                 break;
             }
 
             case OP_NOT: {
                 Value v = vm_pop(vm);
-                v = to_bool(v);
-                vm_push(vm, make_bool_value(!v.as.boolean));
+                vm_push(vm, make_bool_value(!value_is_truthy(v)));
                 break;
             }
 
@@ -1365,18 +1353,19 @@ int vm_execute(VM *vm) {
                 uint32_t name_idx = read_operand(vm);
                 uint32_t arg_count = read_operand(vm);
                 const char *bname = (name_idx < vm->chunk->strings_len) ? vm->chunk->strings[name_idx] : "";
-                Value *args = NULL;
-                if (arg_count > 0) {
-                    args = malloc(arg_count * sizeof(Value));
-                    for (int i = (int)arg_count - 1; i >= 0; i--) {
-                        args[i] = vm_pop(vm);
-                    }
+                if (vm->sp < (int)arg_count) {
+                    vm_raise_at(vm, op_ip, "stack underflow in builtin call");
+                    break;
                 }
-                Value out;
+                Value *args = (arg_count > 0) ? &vm->stack[vm->sp - arg_count] : NULL;
+                Value out = make_none_value();
                 const char *builtin_error = NULL;
                 builtins_set_active_owner(vm->host_owner);
                 int status = call_builtin(bname, args, (int)arg_count, &out, &builtin_error);
-                if (args) free(args);
+                vm->sp -= (int)arg_count;
+                if (vm->current_coro) {
+                    vm->current_coro->sp = vm->sp;
+                }
                 if (status == 1) {
                     vm_push(vm, out);
                 } else if (status == -1) {

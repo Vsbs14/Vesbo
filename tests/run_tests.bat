@@ -307,6 +307,65 @@ findstr /x /c:"tick3 status=0 val=1035" "%OUTPUT%" >nul || goto :failed
 findstr /x /c:"host_ticks=102" "%OUTPUT%" >nul || goto :failed
 findstr /x /c:"EMBED_HOST_PASS" "%OUTPUT%" >nul || goto :failed
 
+REM Test 30: New features audit in interpreter
+"%ROOT%\vesbo.exe" "%~dp0new_features_audit_test.vsb" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"while_break_cont:18" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"till_break_cont:13" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"range_break_cont:9" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"through_break_cont:ab" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"var_compound:26" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"str_compound:hello world" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"struct_compound:15:60" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"array_compound:25:60" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"map_compound:25" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"str_slice_basic:bcd" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"str_slice_no_end:cdef" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"str_slice_neg_start:def" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"str_slice_neg_end:bcde" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"str_substring:abc" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"arr_slice_basic:3:20:40" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"arr_slice_neg:2:40:50" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"safe_and:false" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"safe_or:true" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"split_multichar:3:foo:bar:baz" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"rejoined:foo - bar - baz" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"math_clamp:10" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"math_sign:-1" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"math_pow:32" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"AUDIT_TESTS_PASS" "%OUTPUT%" >nul || goto :failed
+
+REM Test 30: New features audit in direct bytecode VM
+"%ROOT%\vesbo.exe" --vm "%~dp0new_features_audit_test.vsb" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"while_break_cont:18" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"AUDIT_TESTS_PASS" "%OUTPUT%" >nul || goto :failed
+
+REM Test 30: New features audit in serialized bytecode
+"%ROOT%\vesbo.exe" -c "%~dp0new_features_audit_test.vsb" -o "%OUTPUT%.vbo" >nul 2>&1
+if errorlevel 1 goto :failed
+"%ROOT%\vesbo.exe" "%OUTPUT%.vbo" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"while_break_cont:18" "%OUTPUT%" >nul || goto :failed
+findstr /x /c:"AUDIT_TESTS_PASS" "%OUTPUT%" >nul || goto :failed
+del "%OUTPUT%.vbo" >nul 2>nul
+
+REM Test 30: New features audit with gc-stress
+"%ROOT%\vesbo.exe" --gc-stress "%~dp0new_features_audit_test.vsb" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"AUDIT_TESTS_PASS" "%OUTPUT%" >nul || goto :failed
+"%ROOT%\vesbo.exe" --gc-stress --vm "%~dp0new_features_audit_test.vsb" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"AUDIT_TESTS_PASS" "%OUTPUT%" >nul || goto :failed
+
+REM Test 30: Inline eval flag
+"%ROOT%\vesbo.exe" -e "output ""eval_ok""" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"eval_ok" "%OUTPUT%" >nul || goto :failed
+"%ROOT%\vesbo.exe" --vm -e "output ""eval_vm_ok""" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"eval_vm_ok" "%OUTPUT%" >nul || goto :failed
+
 del "%OUTPUT%" >nul 2>nul
 echo All Vesbo smoke tests passed.
 exit /b 0

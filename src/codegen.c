@@ -11,6 +11,18 @@ typedef struct {
     int capacity;
 } LocalVarList;
 
+typedef struct LoopContext {
+    size_t continue_target;
+    int has_continue_target;
+    size_t *continue_jumps;
+    int continue_count;
+    int continue_cap;
+    size_t *break_jumps;
+    int break_count;
+    int break_cap;
+    struct LoopContext *enclosing;
+} LoopContext;
+
 struct CodeGen {
     Chunk *chunk;
     LocalVarList locals;
@@ -21,7 +33,35 @@ struct CodeGen {
     StmtList *imported_asts;
     int imported_ast_count;
     int imported_ast_cap;
+    LoopContext *current_loop;
 };
+
+static void loop_context_add_break(LoopContext *loop, size_t jump_addr) {
+    if (!loop) return;
+    if (loop->break_count >= loop->break_cap) {
+        loop->break_cap = loop->break_cap == 0 ? 8 : loop->break_cap * 2;
+        loop->break_jumps = realloc(loop->break_jumps, (size_t)loop->break_cap * sizeof(size_t));
+    }
+    loop->break_jumps[loop->break_count++] = jump_addr;
+}
+
+static void loop_context_add_continue(LoopContext *loop, size_t jump_addr) {
+    if (!loop) return;
+    if (loop->continue_count >= loop->continue_cap) {
+        loop->continue_cap = loop->continue_cap == 0 ? 8 : loop->continue_cap * 2;
+        loop->continue_jumps = realloc(loop->continue_jumps, (size_t)loop->continue_cap * sizeof(size_t));
+    }
+    loop->continue_jumps[loop->continue_count++] = jump_addr;
+}
+
+static void loop_context_patch_continues(LoopContext *loop, Chunk *chunk, size_t target) {
+    if (!loop || !chunk) return;
+    loop->continue_target = target;
+    loop->has_continue_target = 1;
+    for (int i = 0; i < loop->continue_count; i++) {
+        chunk_patch_operand(chunk, loop->continue_jumps[i] + 1, (uint32_t)target);
+    }
+}
 
 static void codegen_retain_ast(CodeGen *gen, StmtList ast) {
     if (gen->imported_ast_count >= gen->imported_ast_cap) {
@@ -253,6 +293,52 @@ static void codegen_expr(CodeGen *gen, Expr *expr) {
             break;
 
         case EXPR_BINARY: {
+            if (expr->as.binary.op == BIN_AND) {
+                codegen_expr(gen, expr->as.binary.left);
+                size_t jump_false = gen->chunk->code_len;
+                chunk_write_op(gen->chunk, OP_JUMP_IF_FALSE);
+                chunk_write_operand(gen->chunk, 0);
+
+                codegen_expr(gen, expr->as.binary.right);
+                chunk_write_op(gen->chunk, OP_NOT);
+                chunk_write_op(gen->chunk, OP_NOT);
+
+                size_t jump_end = gen->chunk->code_len;
+                chunk_write_op(gen->chunk, OP_JUMP);
+                chunk_write_operand(gen->chunk, 0);
+
+                size_t false_target = gen->chunk->code_len;
+                chunk_patch_operand(gen->chunk, jump_false + 1, (uint32_t)false_target);
+                chunk_write_op(gen->chunk, OP_PUSH_FALSE);
+
+                size_t end_target = gen->chunk->code_len;
+                chunk_patch_operand(gen->chunk, jump_end + 1, (uint32_t)end_target);
+                break;
+            }
+            if (expr->as.binary.op == BIN_OR) {
+                codegen_expr(gen, expr->as.binary.left);
+                chunk_write_op(gen->chunk, OP_NOT);
+                size_t jump_true = gen->chunk->code_len;
+                chunk_write_op(gen->chunk, OP_JUMP_IF_FALSE);
+                chunk_write_operand(gen->chunk, 0);
+
+                codegen_expr(gen, expr->as.binary.right);
+                chunk_write_op(gen->chunk, OP_NOT);
+                chunk_write_op(gen->chunk, OP_NOT);
+
+                size_t jump_end = gen->chunk->code_len;
+                chunk_write_op(gen->chunk, OP_JUMP);
+                chunk_write_operand(gen->chunk, 0);
+
+                size_t true_target = gen->chunk->code_len;
+                chunk_patch_operand(gen->chunk, jump_true + 1, (uint32_t)true_target);
+                chunk_write_op(gen->chunk, OP_PUSH_TRUE);
+
+                size_t end_target = gen->chunk->code_len;
+                chunk_patch_operand(gen->chunk, jump_end + 1, (uint32_t)end_target);
+                break;
+            }
+
             codegen_expr(gen, expr->as.binary.left);
             codegen_expr(gen, expr->as.binary.right);
 
@@ -591,6 +677,13 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
             chunk_write_op(gen->chunk, OP_JUMP_IF_FALSE);
             chunk_write_operand(gen->chunk, 0);
 
+            LoopContext loop_ctx;
+            memset(&loop_ctx, 0, sizeof(loop_ctx));
+            loop_ctx.enclosing = gen->current_loop;
+            loop_ctx.continue_target = loop_start;
+            loop_ctx.has_continue_target = 1;
+            gen->current_loop = &loop_ctx;
+
             codegen_stmt_list(gen, &stmt->as.loop_till.body);
 
             chunk_write_op(gen->chunk, OP_JUMP);
@@ -598,6 +691,12 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
 
             size_t end_addr = gen->chunk->code_len;
             chunk_patch_operand(gen->chunk, jump_addr + 1, (uint32_t)end_addr);
+            for (int b = 0; b < loop_ctx.break_count; b++) {
+                chunk_patch_operand(gen->chunk, loop_ctx.break_jumps[b] + 1, (uint32_t)end_addr);
+            }
+            free(loop_ctx.break_jumps);
+            free(loop_ctx.continue_jumps);
+            gen->current_loop = loop_ctx.enclosing;
             break;
         }
 
@@ -609,6 +708,13 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
             chunk_write_op(gen->chunk, OP_JUMP_IF_FALSE);
             chunk_write_operand(gen->chunk, 0);
 
+            LoopContext loop_ctx;
+            memset(&loop_ctx, 0, sizeof(loop_ctx));
+            loop_ctx.enclosing = gen->current_loop;
+            loop_ctx.continue_target = loop_start;
+            loop_ctx.has_continue_target = 1;
+            gen->current_loop = &loop_ctx;
+
             codegen_stmt_list(gen, &stmt->as.loop_while.body);
 
             chunk_write_op(gen->chunk, OP_JUMP);
@@ -616,6 +722,12 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
 
             size_t end_addr = gen->chunk->code_len;
             chunk_patch_operand(gen->chunk, jump_addr + 1, (uint32_t)end_addr);
+            for (int b = 0; b < loop_ctx.break_count; b++) {
+                chunk_patch_operand(gen->chunk, loop_ctx.break_jumps[b] + 1, (uint32_t)end_addr);
+            }
+            free(loop_ctx.break_jumps);
+            free(loop_ctx.continue_jumps);
+            gen->current_loop = loop_ctx.enclosing;
             break;
         }
 
@@ -625,17 +737,31 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
             chunk_write_op(gen->chunk, OP_DEFINE_LOCAL);
             chunk_write_operand(gen->chunk, (uint32_t)loop_var);
 
+            codegen_expr(gen, stmt->as.loop_range.to);
+            int limit_var = local_vars_add(&gen->locals, "__limit_temp");
+            chunk_write_op(gen->chunk, OP_DEFINE_LOCAL);
+            chunk_write_operand(gen->chunk, (uint32_t)limit_var);
+
             size_t loop_start = gen->chunk->code_len;
             chunk_write_op(gen->chunk, OP_GET_LOCAL);
             chunk_write_operand(gen->chunk, (uint32_t)loop_var);
-            codegen_expr(gen, stmt->as.loop_range.to);
+            chunk_write_op(gen->chunk, OP_GET_LOCAL);
+            chunk_write_operand(gen->chunk, (uint32_t)limit_var);
             chunk_write_op(gen->chunk, OP_LESS_THAN_EQUAL);
 
             size_t jump_addr = gen->chunk->code_len;
             chunk_write_op(gen->chunk, OP_JUMP_IF_FALSE);
             chunk_write_operand(gen->chunk, 0);
 
+            LoopContext loop_ctx;
+            memset(&loop_ctx, 0, sizeof(loop_ctx));
+            loop_ctx.enclosing = gen->current_loop;
+            gen->current_loop = &loop_ctx;
+
             codegen_stmt_list(gen, &stmt->as.loop_range.body);
+
+            size_t cont_target = gen->chunk->code_len;
+            loop_context_patch_continues(&loop_ctx, gen->chunk, cont_target);
 
             chunk_write_op(gen->chunk, OP_GET_LOCAL);
             chunk_write_operand(gen->chunk, (uint32_t)loop_var);
@@ -650,7 +776,14 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
 
             size_t end_addr = gen->chunk->code_len;
             chunk_patch_operand(gen->chunk, jump_addr + 1, (uint32_t)end_addr);
+            for (int b = 0; b < loop_ctx.break_count; b++) {
+                chunk_patch_operand(gen->chunk, loop_ctx.break_jumps[b] + 1, (uint32_t)end_addr);
+            }
+            free(loop_ctx.break_jumps);
+            free(loop_ctx.continue_jumps);
+            gen->current_loop = loop_ctx.enclosing;
 
+            local_vars_pop(gen);
             local_vars_pop(gen);
             break;
         }
@@ -694,7 +827,15 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
             chunk_write_op(gen->chunk, OP_SET_LOCAL);
             chunk_write_operand(gen->chunk, (uint32_t)item_var);
 
+            LoopContext loop_ctx;
+            memset(&loop_ctx, 0, sizeof(loop_ctx));
+            loop_ctx.enclosing = gen->current_loop;
+            gen->current_loop = &loop_ctx;
+
             codegen_stmt_list(gen, &stmt->as.loop_through.body);
+
+            size_t cont_target = gen->chunk->code_len;
+            loop_context_patch_continues(&loop_ctx, gen->chunk, cont_target);
 
             chunk_write_op(gen->chunk, OP_GET_LOCAL);
             chunk_write_operand(gen->chunk, (uint32_t)counter_var);
@@ -709,10 +850,45 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
 
             size_t end_addr = gen->chunk->code_len;
             chunk_patch_operand(gen->chunk, jump_addr + 1, (uint32_t)end_addr);
+            for (int b = 0; b < loop_ctx.break_count; b++) {
+                chunk_patch_operand(gen->chunk, loop_ctx.break_jumps[b] + 1, (uint32_t)end_addr);
+            }
+            free(loop_ctx.break_jumps);
+            free(loop_ctx.continue_jumps);
+            gen->current_loop = loop_ctx.enclosing;
 
             local_vars_pop(gen);
             local_vars_pop(gen);
             local_vars_pop(gen);
+            break;
+        }
+
+        case STMT_BREAK: {
+            if (!gen->current_loop) {
+                fprintf(stderr, "Compilation error: 'break' outside of loop\n");
+                return;
+            }
+            size_t break_addr = gen->chunk->code_len;
+            chunk_write_op(gen->chunk, OP_JUMP);
+            chunk_write_operand(gen->chunk, 0);
+            loop_context_add_break(gen->current_loop, break_addr);
+            break;
+        }
+
+        case STMT_CONTINUE: {
+            if (!gen->current_loop) {
+                fprintf(stderr, "Compilation error: 'continue' outside of loop\n");
+                return;
+            }
+            if (gen->current_loop->has_continue_target) {
+                chunk_write_op(gen->chunk, OP_JUMP);
+                chunk_write_operand(gen->chunk, (uint32_t)gen->current_loop->continue_target);
+            } else {
+                size_t cont_addr = gen->chunk->code_len;
+                chunk_write_op(gen->chunk, OP_JUMP);
+                chunk_write_operand(gen->chunk, 0);
+                loop_context_add_continue(gen->current_loop, cont_addr);
+            }
             break;
         }
 
@@ -896,6 +1072,7 @@ static void codegen_prepass_imports_and_funcs(CodeGen *gen, Stmt **statements, i
 Chunk *codegen_compile(CodeGen *gen, Stmt **statements, int count) {
     local_vars_clear(&gen->locals);
     gen->in_function = 0;
+    gen->current_loop = NULL;
 
     module_system_init();
     codegen_prepass_imports_and_funcs(gen, statements, count, 0);

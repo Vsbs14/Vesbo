@@ -390,7 +390,9 @@ static int builtin_split(Value *args, int arg_count, Value *out, const char **er
     const char *delim = args[1].as.string;
     size_t delim_len = strlen(delim);
 
+    int saved_roots = gc_save_roots();
     Value arr = make_array_value();
+    gc_push_root(arr);
 
     if (delim_len == 0) {
         for (size_t i = 0; str[i]; i++) {
@@ -398,6 +400,7 @@ static int builtin_split(Value *args, int arg_count, Value *out, const char **er
             value_array_push(arr.as.array, make_string_value(ch));
         }
         *out = arr;
+        gc_restore_roots(saved_roots);
         return 1;
     }
 
@@ -414,7 +417,102 @@ static int builtin_split(Value *args, int arg_count, Value *out, const char **er
     }
     value_array_push(arr.as.array, make_string_value(start));
     *out = arr;
+    gc_restore_roots(saved_roots);
     return 1;
+}
+
+static int builtin_slice(Value *args, int arg_count, Value *out, const char **error) {
+    if (arg_count < 2 || arg_count > 3) {
+        *error = "slice() expects 2 or 3 arguments (collection, start, [end])";
+        return -1;
+    }
+    if (args[0].type != VAL_STRING && args[0].type != VAL_ARRAY) {
+        *error = "slice() requires a string or array as first argument";
+        return -1;
+    }
+    if (args[1].type != VAL_NUMBER) {
+        *error = "slice() start index must be a number";
+        return -1;
+    }
+    if (args[1].as.number != (double)(int)args[1].as.number) {
+        *error = "slice() start index must be an integer";
+        return -1;
+    }
+    int start = (int)args[1].as.number;
+
+    int has_end = (arg_count == 3);
+    int end = 0;
+    if (has_end) {
+        if (args[2].type != VAL_NUMBER) {
+            *error = "slice() end index must be a number";
+            return -1;
+        }
+        if (args[2].as.number != (double)(int)args[2].as.number) {
+            *error = "slice() end index must be an integer";
+            return -1;
+        }
+        end = (int)args[2].as.number;
+    }
+
+    if (args[0].type == VAL_STRING) {
+        const char *s = args[0].as.string ? args[0].as.string : "";
+        int len = (int)strlen(s);
+        if (start < 0) start += len;
+        if (start < 0) start = 0;
+        if (start > len) start = len;
+
+        if (!has_end) {
+            end = len;
+        } else {
+            if (end < 0) end += len;
+            if (end < 0) end = 0;
+            if (end > len) end = len;
+        }
+
+        if (start >= end) {
+            *out = make_string_value("");
+            return 1;
+        }
+
+        int count = end - start;
+        char *sub = malloc((size_t)count + 1);
+        if (!sub) {
+            *error = "out of memory in slice()";
+            return -1;
+        }
+        memcpy(sub, s + start, (size_t)count);
+        sub[count] = '\0';
+        *out = make_string_value_len(sub, (size_t)count);
+        free(sub);
+        return 1;
+    } else {
+        ValueArray *arr = args[0].as.array;
+        int len = arr ? arr->count : 0;
+        if (start < 0) start += len;
+        if (start < 0) start = 0;
+        if (start > len) start = len;
+
+        if (!has_end) {
+            end = len;
+        } else {
+            if (end < 0) end += len;
+            if (end < 0) end = 0;
+            if (end > len) end = len;
+        }
+
+        int saved_roots = gc_save_roots();
+        Value new_arr = make_array_value();
+        gc_push_root(new_arr);
+
+        if (start < end && arr) {
+            for (int i = start; i < end; i++) {
+                value_array_push(new_arr.as.array, arr->items[i]);
+            }
+        }
+        *out = new_arr;
+        gc_restore_roots(saved_roots);
+        return 1;
+    }
 }
 
 static int builtin_join(Value *args, int arg_count, Value *out, const char **error) {
@@ -847,6 +945,8 @@ int call_builtin(const char *name, Value *args, int arg_count, Value *out,
     if (strcmp(name, "contains") == 0)  return builtin_contains(args, arg_count, out, error_message);
     if (strcmp(name, "replace") == 0)   return builtin_replace(args, arg_count, out, error_message);
     if (strcmp(name, "split") == 0)     return builtin_split(args, arg_count, out, error_message);
+    if (strcmp(name, "slice") == 0)     return builtin_slice(args, arg_count, out, error_message);
+    if (strcmp(name, "substring") == 0) return builtin_slice(args, arg_count, out, error_message);
     if (strcmp(name, "join") == 0)      return builtin_join(args, arg_count, out, error_message);
     if (strcmp(name, "keys") == 0)      return builtin_keys(args, arg_count, out, error_message);
     if (strcmp(name, "values") == 0)    return builtin_values(args, arg_count, out, error_message);

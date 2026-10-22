@@ -3,21 +3,6 @@
 global var PI is 3.141592653589793
 global var E is 2.718281828459045
 
-fnc abs(x)
-    if x < 0
-        return -x
-    return x
-
-fnc min(a, b)
-    if a < b
-        return a
-    return b
-
-fnc max(a, b)
-    if a > b
-        return a
-    return b
-
 fnc clamp(val, low, high)
     if val < low
         return low

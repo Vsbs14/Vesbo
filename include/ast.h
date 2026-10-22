@@ -34,6 +34,8 @@ typedef enum {
     STMT_LOOP_THROUGH, // loop through collection as item
     STMT_FUNC_DECL,
     STMT_RETURN,
+    STMT_BREAK,
+    STMT_CONTINUE,
     STMT_OUTPUT,
     STMT_TRY_CATCH,
     STMT_EXPR,         // expression used as a statement (e.g. a bare call)
@@ -207,9 +209,13 @@ Stmt *make_loop_range_stmt(Expr *from, Expr *to, const char *var_name, StmtList 
 Stmt *make_loop_through_stmt(Expr *collection, const char *item_name, StmtList body, int line);
 Stmt *make_func_decl_stmt(const char *name, StringList params, StmtList body, int line);
 Stmt *make_return_stmt(Expr *value, int line);
+Stmt *make_break_stmt(int line);
+Stmt *make_continue_stmt(int line);
 Stmt *make_output_stmt(Expr *value, int line);
 Stmt *make_try_catch_stmt(StmtList try_body, const char *error_name, StmtList catch_body, int line);
 Stmt *make_expr_stmt(Expr *expr, int line);
+
+Expr *copy_expr(const Expr *expr);
 
 void stmt_list_init(StmtList *list);
 void stmt_list_add(StmtList *list, Stmt *stmt);

@@ -329,6 +329,14 @@ Stmt *make_return_stmt(Expr *value, int line) {
     return s;
 }
 
+Stmt *make_break_stmt(int line) {
+    return alloc_stmt(STMT_BREAK, line);
+}
+
+Stmt *make_continue_stmt(int line) {
+    return alloc_stmt(STMT_CONTINUE, line);
+}
+
 Stmt *make_output_stmt(Expr *value, int line) {
     Stmt *s = alloc_stmt(STMT_OUTPUT, line);
     s->as.output_stmt.value = value;
@@ -477,6 +485,9 @@ void free_stmt(Stmt *stmt) {
             free_stmt_list(&stmt->as.func_decl.body);
             break;
         case STMT_RETURN: free_expr(stmt->as.return_stmt.value); break;
+        case STMT_BREAK:
+        case STMT_CONTINUE:
+            break;
         case STMT_OUTPUT: free_expr(stmt->as.output_stmt.value); break;
         case STMT_TRY_CATCH:
             free_stmt_list(&stmt->as.try_catch.try_body);
@@ -487,4 +498,81 @@ void free_stmt(Stmt *stmt) {
     }
     free(stmt->file);
     free(stmt);
+}
+
+Expr *copy_expr(const Expr *expr) {
+    if (!expr) return NULL;
+    Expr *copy = alloc_expr(expr->type, expr->line);
+    copy->column = expr->column;
+    if (expr->file) {
+        if (copy->file) free(copy->file);
+        copy->file = copy_string(expr->file);
+    }
+
+    switch (expr->type) {
+        case EXPR_NUMBER:
+            copy->as.number_val = expr->as.number_val;
+            break;
+        case EXPR_STRING:
+            copy->as.string_val = copy_string(expr->as.string_val);
+            break;
+        case EXPR_BOOL:
+            copy->as.bool_val = expr->as.bool_val;
+            break;
+        case EXPR_NONE:
+            break;
+        case EXPR_IDENT:
+            copy->as.ident_name = copy_string(expr->as.ident_name);
+            break;
+        case EXPR_ARRAY:
+            expr_list_init(&copy->as.array.elements);
+            for (int i = 0; i < expr->as.array.elements.count; i++) {
+                expr_list_add(&copy->as.array.elements, copy_expr(expr->as.array.elements.items[i]));
+            }
+            break;
+        case EXPR_MAP:
+            map_entry_list_init(&copy->as.map.entries);
+            for (int i = 0; i < expr->as.map.entries.count; i++) {
+                map_entry_list_add(&copy->as.map.entries,
+                                   copy_expr(expr->as.map.entries.items[i].key),
+                                   copy_expr(expr->as.map.entries.items[i].value));
+            }
+            break;
+        case EXPR_INDEX:
+            copy->as.index_expr.collection = copy_expr(expr->as.index_expr.collection);
+            copy->as.index_expr.index = copy_expr(expr->as.index_expr.index);
+            break;
+        case EXPR_GET_FIELD:
+            copy->as.get_field.object = copy_expr(expr->as.get_field.object);
+            copy->as.get_field.field_name = copy_string(expr->as.get_field.field_name);
+            break;
+        case EXPR_METHOD_CALL:
+            copy->as.method_call.object = copy_expr(expr->as.method_call.object);
+            copy->as.method_call.method_name = copy_string(expr->as.method_call.method_name);
+            expr_list_init(&copy->as.method_call.args);
+            for (int i = 0; i < expr->as.method_call.args.count; i++) {
+                expr_list_add(&copy->as.method_call.args, copy_expr(expr->as.method_call.args.items[i]));
+            }
+            break;
+        case EXPR_YIELD:
+            copy->as.yield_expr.value = copy_expr(expr->as.yield_expr.value);
+            break;
+        case EXPR_BINARY:
+            copy->as.binary.op = expr->as.binary.op;
+            copy->as.binary.left = copy_expr(expr->as.binary.left);
+            copy->as.binary.right = copy_expr(expr->as.binary.right);
+            break;
+        case EXPR_UNARY:
+            copy->as.unary.op = expr->as.unary.op;
+            copy->as.unary.operand = copy_expr(expr->as.unary.operand);
+            break;
+        case EXPR_CALL:
+            copy->as.call.callee_name = copy_string(expr->as.call.callee_name);
+            expr_list_init(&copy->as.call.args);
+            for (int i = 0; i < expr->as.call.args.count; i++) {
+                expr_list_add(&copy->as.call.args, copy_expr(expr->as.call.args.items[i]));
+            }
+            break;
+    }
+    return copy;
 }
