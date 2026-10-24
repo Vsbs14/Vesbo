@@ -366,6 +366,23 @@ findstr /x /c:"eval_ok" "%OUTPUT%" >nul || goto :failed
 if errorlevel 1 goto :failed
 findstr /x /c:"eval_vm_ok" "%OUTPUT%" >nul || goto :failed
 
+REM Test 31: Bug hunt test suite (break in try, VM loop scoping, builtin checks, replace)
+"%ROOT%\vesbo.exe" "%~dp0bug_hunt_test.vsb" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"BUG_HUNT_PASS" "%OUTPUT%" >nul || goto :failed
+
+"%ROOT%\vesbo.exe" --vm "%~dp0bug_hunt_test.vsb" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"BUG_HUNT_PASS" "%OUTPUT%" >nul || goto :failed
+
+"%ROOT%\vesbo.exe" --gc-stress "%~dp0bug_hunt_test.vsb" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"BUG_HUNT_PASS" "%OUTPUT%" >nul || goto :failed
+
+"%ROOT%\vesbo.exe" --gc-stress --vm "%~dp0bug_hunt_test.vsb" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"BUG_HUNT_PASS" "%OUTPUT%" >nul || goto :failed
+
 del "%OUTPUT%" >nul 2>nul
 echo All Vesbo smoke tests passed.
 exit /b 0

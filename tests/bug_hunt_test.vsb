@@ -1,0 +1,69 @@
+-- Bug hunt test suite for Vesbo
+
+-- Test 1: Break inside try inside loop
+var loop1_passed is false
+loop while true
+    try
+        break
+    catch e
+        output "ERR_CAUGHT_IN_BREAK"
+output "after_break_try"
+
+-- Test 2: Error after loop should NOT be caught by loop's try
+var caught_after is false
+try
+    var err_val is 1 / 0
+catch e2
+    caught_after = true
+
+if caught_after
+    output "err_caught_correctly"
+else
+    output "ERR_NOT_CAUGHT"
+
+-- Test 3: Continue inside try inside loop
+var cont_sum is 0
+var cont_i is 0
+loop while cont_i < 5
+    cont_i = cont_i + 1
+    try
+        if cont_i == 3
+            continue
+    catch e3
+        output "ERR_CAUGHT_IN_CONT"
+    cont_sum = cont_sum + cont_i
+
+output $"cont_sum:{cont_sum}"
+
+-- Test 4: Nested loops break inside try
+var nested_sum is 0
+loop from 1 to 3 as i
+    loop from 1 to 3 as j
+        try
+            if j == 2
+                break
+        catch e4
+            output "ERR_NESTED_TRY"
+        nested_sum = nested_sum + 1
+
+output $"nested_sum:{nested_sum}"
+
+-- Test 5: Builtin slice and substring recognized in VM
+var s is "hello world"
+output $"slice_test:{slice(s, 0, 5)}"
+output $"substr_test:{substring(s, 6)}"
+
+-- Test 6: Keys and values on maps under GC stress
+var test_map is {"alpha": 1, "beta": 2, "gamma": 3}
+var k is keys(test_map)
+var v is values(test_map)
+output $"map_keys_count:{length(k)}"
+output $"map_vals_count:{length(v)}"
+
+-- Test 7: Replace with shorter string and empty string
+var rep1 is replace("banana", "a", "")
+var rep2 is replace("aaaa", "aa", "b")
+output $"rep1:{rep1}"
+output $"rep2:{rep2}"
+
+output "BUG_HUNT_PASS"

@@ -349,5 +349,15 @@ grep -Fxq "eval_ok" "$OUTPUT" || failed
 ./vesbo --vm -e 'output "eval_vm_ok"' > "$OUTPUT" 2>&1 || failed
 grep -Fxq "eval_vm_ok" "$OUTPUT" || failed
 
+set_test "Test 31: Bug hunt test suite (break in try, VM loop scoping, builtin checks, replace)"
+./vesbo tests/bug_hunt_test.vsb > "$OUTPUT" 2>&1 || failed
+grep -Fxq "BUG_HUNT_PASS" "$OUTPUT" || failed
+./vesbo --vm tests/bug_hunt_test.vsb > "$OUTPUT" 2>&1 || failed
+grep -Fxq "BUG_HUNT_PASS" "$OUTPUT" || failed
+./vesbo --gc-stress tests/bug_hunt_test.vsb > "$OUTPUT" 2>&1 || failed
+grep -Fxq "BUG_HUNT_PASS" "$OUTPUT" || failed
+./vesbo --gc-stress --vm tests/bug_hunt_test.vsb > "$OUTPUT" 2>&1 || failed
+grep -Fxq "BUG_HUNT_PASS" "$OUTPUT" || failed
+
 echo "All Vesbo smoke tests passed."
 exit 0

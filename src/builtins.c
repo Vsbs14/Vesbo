@@ -363,8 +363,12 @@ static int builtin_replace(Value *args, int arg_count, Value *out, const char **
         tmp = ins + rep_len;
     }
 
-    size_t new_len = strlen(orig) + (with_len - rep_len) * (size_t)count;
+    size_t new_len = strlen(orig) + (size_t)count * with_len - (size_t)count * rep_len;
     char *result = malloc(new_len + 1);
+    if (!result) {
+        *error = "out of memory in replace()";
+        return -1;
+    }
     char *dest = result;
     tmp = orig;
     while ((ins = strstr(tmp, rep)) != NULL) {
@@ -530,6 +534,10 @@ static int builtin_join(Value *args, int arg_count, Value *out, const char **err
     }
 
     char **parts = malloc((size_t)arr->count * sizeof(char *));
+    if (!parts) {
+        *error = "out of memory in join()";
+        return -1;
+    }
     size_t total_len = 0;
     for (int i = 0; i < arr->count; i++) {
         parts[i] = value_to_display_string(arr->items[i]);
@@ -538,6 +546,12 @@ static int builtin_join(Value *args, int arg_count, Value *out, const char **err
     total_len += delim_len * (size_t)(arr->count - 1);
 
     char *result = malloc(total_len + 1);
+    if (!result) {
+        for (int i = 0; i < arr->count; i++) free(parts[i]);
+        free(parts);
+        *error = "out of memory in join()";
+        return -1;
+    }
     char *dest = result;
     for (int i = 0; i < arr->count; i++) {
         if (i > 0) {
@@ -561,12 +575,15 @@ static int builtin_keys(Value *args, int arg_count, Value *out, const char **err
         *error = "keys() expects exactly 1 map argument";
         return -1;
     }
+    int saved_roots = gc_save_roots();
     Value arr = make_array_value();
+    gc_push_root(arr);
     ValueMap *m = args[0].as.map;
     for (int i = 0; i < m->count; i++) {
         value_array_push(arr.as.array, make_obj_string_value(m->entries[i].key_obj));
     }
     *out = arr;
+    gc_restore_roots(saved_roots);
     return 1;
 }
 
@@ -575,12 +592,15 @@ static int builtin_values(Value *args, int arg_count, Value *out, const char **e
         *error = "values() expects exactly 1 map argument";
         return -1;
     }
+    int saved_roots = gc_save_roots();
     Value arr = make_array_value();
+    gc_push_root(arr);
     ValueMap *m = args[0].as.map;
     for (int i = 0; i < m->count; i++) {
         value_array_push(arr.as.array, m->entries[i].value);
     }
     *out = arr;
+    gc_restore_roots(saved_roots);
     return 1;
 }
 
@@ -843,7 +863,9 @@ static int builtin_gc_stats(Value *args, int arg_count, Value *out, const char *
         *error = "gc_stats() expects no arguments";
         return -1;
     }
+    int saved_roots = gc_save_roots();
     Value m = make_map_value();
+    gc_push_root(m);
     value_map_set(m.as.map, "instructions", make_number_value((double)gc_get_instructions()));
     value_map_set(m.as.map, "allocations", make_number_value((double)gc_get_total_allocations()));
     value_map_set(m.as.map, "total_allocations", make_number_value((double)gc_get_total_allocations()));
@@ -855,6 +877,7 @@ static int builtin_gc_stats(Value *args, int arg_count, Value *out, const char *
     value_map_set(m.as.map, "objects_freed", make_number_value((double)gc_get_objects_freed()));
     value_map_set(m.as.map, "freed_objects", make_number_value((double)gc_get_objects_freed()));
     *out = m;
+    gc_restore_roots(saved_roots);
     return 1;
 }
 
@@ -891,6 +914,8 @@ int is_builtin(const char *name) {
            strcmp(name, "contains") == 0 ||
            strcmp(name, "replace") == 0 ||
            strcmp(name, "split") == 0 ||
+           strcmp(name, "slice") == 0 ||
+           strcmp(name, "substring") == 0 ||
            strcmp(name, "join") == 0 ||
            strcmp(name, "keys") == 0 ||
            strcmp(name, "values") == 0 ||
