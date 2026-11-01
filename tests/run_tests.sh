@@ -297,6 +297,58 @@ grep -Fxq "tick3 status=0 val=1035" "$OUTPUT" || failed
 grep -Fxq "host_ticks=102" "$OUTPUT" || failed
 grep -Fxq "EMBED_HOST_PASS" "$OUTPUT" || failed
 
+# Test 30: Control flow and language features (break/continue, compound assignments, slice/substring, short-circuit, stdlib)
+set_test "Test 30: Control flow interpreter"
+./vesbo tests/control_flow_test.vsb > "$OUTPUT" 2>&1 || failed
+grep -Fxq "while_break_cont:18" "$OUTPUT" || failed
+grep -Fxq "till_break_cont:13" "$OUTPUT" || failed
+grep -Fxq "range_break_cont:9" "$OUTPUT" || failed
+grep -Fxq "through_break_cont:ab" "$OUTPUT" || failed
+grep -Fxq "var_compound:26" "$OUTPUT" || failed
+grep -Fxq "str_compound:hello world" "$OUTPUT" || failed
+grep -Fxq "struct_compound:15:60" "$OUTPUT" || failed
+grep -Fxq "array_compound:25:60" "$OUTPUT" || failed
+grep -Fxq "map_compound:25" "$OUTPUT" || failed
+grep -Fxq "str_slice_basic:bcd" "$OUTPUT" || failed
+grep -Fxq "str_slice_no_end:cdef" "$OUTPUT" || failed
+grep -Fxq "str_slice_neg_start:def" "$OUTPUT" || failed
+grep -Fxq "str_slice_neg_end:bcde" "$OUTPUT" || failed
+grep -Fxq "str_substring:abc" "$OUTPUT" || failed
+grep -Fxq "arr_slice_basic:3:20:40" "$OUTPUT" || failed
+grep -Fxq "arr_slice_neg:2:40:50" "$OUTPUT" || failed
+grep -Fxq "safe_and:false" "$OUTPUT" || failed
+grep -Fxq "safe_or:true" "$OUTPUT" || failed
+grep -Fxq "split_multichar:3:foo:bar:baz" "$OUTPUT" || failed
+grep -Fxq "rejoined:foo - bar - baz" "$OUTPUT" || failed
+grep -Fxq "math_clamp:10" "$OUTPUT" || failed
+grep -Fxq "math_sign:-1" "$OUTPUT" || failed
+grep -Fxq "math_pow:32" "$OUTPUT" || failed
+grep -Fxq "CONTROL_FLOW_PASS" "$OUTPUT" || failed
+
+set_test "Test 30: Control flow direct bytecode VM"
+./vesbo --vm tests/control_flow_test.vsb > "$OUTPUT" 2>&1 || failed
+grep -Fxq "while_break_cont:18" "$OUTPUT" || failed
+grep -Fxq "CONTROL_FLOW_PASS" "$OUTPUT" || failed
+
+set_test "Test 30: Control flow serialized bytecode"
+./vesbo -c tests/control_flow_test.vsb -o "$VBO_FILE" > /dev/null 2>&1 || failed
+./vesbo "$VBO_FILE" > "$OUTPUT" 2>&1 || failed
+grep -Fxq "while_break_cont:18" "$OUTPUT" || failed
+grep -Fxq "CONTROL_FLOW_PASS" "$OUTPUT" || failed
+rm -f "$VBO_FILE"
+
+set_test "Test 30: Control flow --gc-stress"
+./vesbo --gc-stress tests/control_flow_test.vsb > "$OUTPUT" 2>&1 || failed
+grep -Fxq "CONTROL_FLOW_PASS" "$OUTPUT" || failed
+./vesbo --gc-stress --vm tests/control_flow_test.vsb > "$OUTPUT" 2>&1 || failed
+grep -Fxq "CONTROL_FLOW_PASS" "$OUTPUT" || failed
+
+set_test "Test 30: Inline eval (-e) flag"
+./vesbo -e 'output "eval_ok"' > "$OUTPUT" 2>&1 || failed
+grep -Fxq "eval_ok" "$OUTPUT" || failed
+./vesbo --vm -e 'output "eval_vm_ok"' > "$OUTPUT" 2>&1 || failed
+grep -Fxq "eval_vm_ok" "$OUTPUT" || failed
+
 
 echo "All Vesbo smoke tests passed."
 exit 0

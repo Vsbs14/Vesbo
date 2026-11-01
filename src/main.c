@@ -170,6 +170,7 @@ static void print_usage(const char *prog_name) {
     fprintf(stderr, "Vesbo %s — an English-readable programming language\n\n", VESBO_VERSION);
     fprintf(stderr, "Usage: %s [options] [file.vsb|file.vbo]\n\n", prog_name);
     fprintf(stderr, "Options:\n");
+    fprintf(stderr, "  -e, --eval <code>        Execute inline code string\n");
     fprintf(stderr, "  -c, --compile            Compile .vsb source to .vbo bytecode\n");
     fprintf(stderr, "  -o, --output <file>      Output file (used with -c)\n");
     fprintf(stderr, "  -d, --disassemble        Disassemble .vsb source or .vbo bytecode\n");
@@ -422,6 +423,7 @@ int main(int argc, char **argv) {
     int vm_mode = 0;
     const char *source_file = NULL;
     const char *output_file = NULL;
+    const char *eval_code = NULL;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
@@ -430,6 +432,13 @@ int main(int argc, char **argv) {
         } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
             print_usage(argv[0]);
             return 0;
+        } else if (strcmp(argv[i], "-e") == 0 || strcmp(argv[i], "--eval") == 0) {
+            if (i + 1 < argc) {
+                eval_code = argv[++i];
+            } else {
+                fprintf(stderr, "Error: %s requires a code argument\n", argv[i]);
+                return 1;
+            }
         } else if (strcmp(argv[i], "-i") == 0 || strcmp(argv[i], "--repl") == 0) {
             repl_mode = 1;
         } else if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--disassemble") == 0) {
@@ -455,6 +464,55 @@ int main(int argc, char **argv) {
             return 1;
         } else {
             source_file = argv[i];
+        }
+    }
+
+    if (eval_code) {
+        module_system_init();
+        module_set_current_file("<eval>");
+        lexer_init(eval_code);
+        StmtList program = parse_program();
+
+        if (compile_mode || disassemble_mode || vm_mode) {
+            CodeGen *gen = codegen_new();
+            if (!gen) {
+                fprintf(stderr, "Failed to create code generator\n");
+                free_stmt_list(&program);
+                return 1;
+            }
+
+            Chunk *chunk = codegen_compile(gen, program.items, program.count);
+            if (!chunk) {
+                fprintf(stderr, "Compilation failed\n");
+                codegen_free(gen);
+                free_stmt_list(&program);
+                return 1;
+            }
+
+            if (disassemble_mode) {
+                disassemble_chunk(chunk, "<eval>");
+            }
+
+            int ok = 1;
+            if (compile_mode) {
+                if (!output_file) output_file = "out.vbo";
+                ok = write_bytecode(chunk, output_file);
+            } else if (vm_mode && !disassemble_mode) {
+                VM *vm = vm_new(chunk);
+                if (!vm) {
+                    ok = 0;
+                } else {
+                    ok = (vm_execute(vm) == 0);
+                    vm_free(vm);
+                }
+            }
+
+            codegen_free(gen);
+            free_stmt_list(&program);
+            return ok ? 0 : 1;
+        } else {
+            interpret_program(program);
+            return 0;
         }
     }
 

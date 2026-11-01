@@ -797,6 +797,18 @@ static Stmt *parse_statement(void) {
     if (check(TOKEN_FT)) return parse_func_decl();
     if (check(TOKEN_STRUCT)) return parse_struct_decl();
     if (check(TOKEN_RETURN)) return parse_return();
+    if (match(TOKEN_BREAK)) {
+        int line = previous_tok.line;
+        int col = previous_tok.column;
+        ast_set_current_loc(module_get_current_file(), line, col);
+        return make_break_stmt(line);
+    }
+    if (match(TOKEN_CONTINUE)) {
+        int line = previous_tok.line;
+        int col = previous_tok.column;
+        ast_set_current_loc(module_get_current_file(), line, col);
+        return make_continue_stmt(line);
+    }
     if (check(TOKEN_OUTPUT)) return parse_output();
     if (check(TOKEN_TRY)) return parse_try_catch();
 
@@ -812,6 +824,18 @@ static Stmt *parse_statement(void) {
     /* Support direct '=' assignment: e.g. camera.position.x = 10 or x = 5 or arr[0] = 1 */
     if (match(TOKEN_ASSIGN)) {
         Expr *val = parse_expression();
+        return target_expr_to_assign_stmt(expr, val, line, col);
+    }
+
+    /* Support compound assignments: +=, -=, *=, /= */
+    if (match(TOKEN_PLUS_ASSIGN) || match(TOKEN_MINUS_ASSIGN) ||
+        match(TOKEN_STAR_ASSIGN) || match(TOKEN_SLASH_ASSIGN)) {
+        TokenType op_type = previous_tok.type;
+        BinOp bop = (op_type == TOKEN_PLUS_ASSIGN) ? BIN_ADD :
+                    (op_type == TOKEN_MINUS_ASSIGN) ? BIN_SUB :
+                    (op_type == TOKEN_STAR_ASSIGN) ? BIN_MUL : BIN_DIV;
+        Expr *rhs = parse_expression();
+        Expr *val = make_binary_expr(bop, copy_expr(expr), rhs, line);
         return target_expr_to_assign_stmt(expr, val, line, col);
     }
 

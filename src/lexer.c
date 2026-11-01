@@ -426,6 +426,8 @@ static Token identifier_or_keyword_token(void) {
     if (len == 5 && strncmp(text, "yield", 5) == 0) return make_token(TOKEN_YIELD);
     if (len == 5 && strncmp(text, "gives", 5) == 0) return make_token(TOKEN_GIVES);
     if (len == 6 && strncmp(text, "return", 6) == 0) return make_token(TOKEN_RETURN);
+    if (len == 5 && strncmp(text, "break", 5) == 0) return make_token(TOKEN_BREAK);
+    if (len == 8 && strncmp(text, "continue", 8) == 0) return make_token(TOKEN_CONTINUE);
     if (len == 2 && strncmp(text, "if", 2) == 0) return make_token(TOKEN_IF);
     if (len == 4 && strncmp(text, "else", 4) == 0) return make_token(TOKEN_ELSE);
     if (len == 4 && strncmp(text, "loop", 4) == 0) return make_token(TOKEN_LOOP);
@@ -509,13 +511,21 @@ Token lexer_next_token(void) {
         case ']': return make_token(TOKEN_RBRACKET);
         case ',': return make_token(TOKEN_COMMA);
         case '.': return make_token(TOKEN_DOT);
-        case '+': return make_token(TOKEN_PLUS);
+        case '+':
+            if (peek() == '=') { advance(); return make_token(TOKEN_PLUS_ASSIGN); }
+            return make_token(TOKEN_PLUS);
         case '{': return make_token(TOKEN_LBRACE);
         case '}': return make_token(TOKEN_RBRACE);
         case ':': return make_token(TOKEN_COLON);
-        case '-': return make_token(TOKEN_MINUS);
-        case '*': return make_token(TOKEN_STAR);
-        case '/': return make_token(TOKEN_SLASH);
+        case '-':
+            if (peek() == '=') { advance(); return make_token(TOKEN_MINUS_ASSIGN); }
+            return make_token(TOKEN_MINUS);
+        case '*':
+            if (peek() == '=') { advance(); return make_token(TOKEN_STAR_ASSIGN); }
+            return make_token(TOKEN_STAR);
+        case '/':
+            if (peek() == '=') { advance(); return make_token(TOKEN_SLASH_ASSIGN); }
+            return make_token(TOKEN_SLASH);
         case '%': return make_token(TOKEN_PERCENT);
         case '<':
             if (peek() == '=') { advance(); return make_token(TOKEN_LESS_THAN_OR_EQUAL); }
