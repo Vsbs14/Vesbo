@@ -331,6 +331,7 @@ static void sync_coro_vm_to_env(VM *vm, Environment *env) {
 static Value eval_binary(Expr *expr, Environment *env, ExecResult *result) {
     Value left = eval_expr(expr->as.binary.left, env, result);
     if (result->signal != SIGNAL_NONE) return make_none_value();
+    gc_push_root(left);
 
     if (expr->as.binary.op == BIN_AND) {
         if (!value_is_truthy(left)) return make_bool_value(0);
@@ -548,6 +549,7 @@ static Value eval_call(Expr *expr, Environment *env, ExecResult *result) {
                 if (init_args) free(init_args);
                 return make_none_value();
             }
+            gc_push_root(init_args[i]);
         }
         Value co_val = make_coroutine_value(-1, fn_name, init_args, init_argc);
         if (init_args) free(init_args);
@@ -618,6 +620,7 @@ static Value eval_call(Expr *expr, Environment *env, ExecResult *result) {
     for (int i = 0; i < arg_count; i++) {
         args[i] = eval_expr(expr->as.call.args.items[i], env, result);
         if (result->signal != SIGNAL_NONE) { free(args); return make_none_value(); }
+        gc_push_root(args[i]);
     }
 
     if (expr->file) cur_loc_file = expr->file;
@@ -636,6 +639,7 @@ static Value eval_call(Expr *expr, Environment *env, ExecResult *result) {
             return make_none_value();
         }
         Value inst = make_instance_value(sdef);
+        gc_push_root(inst);
         for (int i = 0; i < arg_count; i++) {
             inst.as.instance->fields[i] = args[i];
         }
@@ -679,12 +683,14 @@ static Value eval_call(Expr *expr, Environment *env, ExecResult *result) {
 static Value eval_method_call(Expr *expr, Environment *env, ExecResult *result) {
     Value receiver = eval_expr(expr->as.method_call.object, env, result);
     if (result->signal != SIGNAL_NONE) return make_none_value();
+    gc_push_root(receiver);
 
     int arg_count = expr->as.method_call.args.count;
     Value *args = malloc(sizeof(Value) * (size_t)(arg_count > 0 ? arg_count : 1));
     for (int i = 0; i < arg_count; i++) {
         args[i] = eval_expr(expr->as.method_call.args.items[i], env, result);
         if (result->signal != SIGNAL_NONE) { free(args); return make_none_value(); }
+        gc_push_root(args[i]);
     }
 
     if (expr->file) cur_loc_file = expr->file;
@@ -789,6 +795,7 @@ static Value eval_expr(Expr *expr, Environment *env, ExecResult *result) {
 
         case EXPR_ARRAY: {
             Value arr = make_array_value();
+            gc_push_root(arr);
             for (int i = 0; i < expr->as.array.elements.count; i++) {
                 Value item = eval_expr(expr->as.array.elements.items[i], env, result);
                 if (result->signal != SIGNAL_NONE) return make_none_value();
@@ -799,9 +806,11 @@ static Value eval_expr(Expr *expr, Environment *env, ExecResult *result) {
 
         case EXPR_MAP: {
             Value map_val = make_map_value();
+            gc_push_root(map_val);
             for (int i = 0; i < expr->as.map.entries.count; i++) {
                 Value k = eval_expr(expr->as.map.entries.items[i].key, env, result);
                 if (result->signal != SIGNAL_NONE) return make_none_value();
+                gc_push_root(k);
                 Value v = eval_expr(expr->as.map.entries.items[i].value, env, result);
                 if (result->signal != SIGNAL_NONE) return make_none_value();
 
@@ -819,6 +828,7 @@ static Value eval_expr(Expr *expr, Environment *env, ExecResult *result) {
         case EXPR_INDEX: {
             Value collection = eval_expr(expr->as.index_expr.collection, env, result);
             if (result->signal != SIGNAL_NONE) return make_none_value();
+            gc_push_root(collection);
             Value index = eval_expr(expr->as.index_expr.index, env, result);
             if (result->signal != SIGNAL_NONE) return make_none_value();
 
@@ -1031,6 +1041,7 @@ static ExecResult exec_stmt_inner(Stmt *stmt, Environment *env) {
             if (stmt->as.index_set.collection) {
                 target = eval_expr(stmt->as.index_set.collection, env, &result);
                 if (result.signal != SIGNAL_NONE) return result;
+                gc_push_root(target);
             } else {
                 if (!env_get(env, stmt->as.index_set.name, &target)) {
                     char msg[256];
@@ -1040,6 +1051,7 @@ static ExecResult exec_stmt_inner(Stmt *stmt, Environment *env) {
             }
             Value index = eval_expr(stmt->as.index_set.index, env, &result);
             if (result.signal != SIGNAL_NONE) return result;
+            gc_push_root(index);
             Value val = eval_expr(stmt->as.index_set.value, env, &result);
             if (result.signal != SIGNAL_NONE) return result;
 
@@ -1073,6 +1085,7 @@ static ExecResult exec_stmt_inner(Stmt *stmt, Environment *env) {
         case STMT_SET_FIELD: {
             Value obj = eval_expr(stmt->as.set_field.object, env, &result);
             if (result.signal != SIGNAL_NONE) return result;
+            gc_push_root(obj);
             Value val = eval_expr(stmt->as.set_field.value, env, &result);
             if (result.signal != SIGNAL_NONE) return result;
             const char *fname = stmt->as.set_field.field_name;

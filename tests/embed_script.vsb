@@ -1,4 +1,4 @@
--- Embedded script for Milestone L5 C host test
+-- Embedded script for C host embedding test
 
 global var host_ticks is 0
 

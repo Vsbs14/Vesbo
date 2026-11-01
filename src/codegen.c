@@ -20,6 +20,9 @@ typedef struct LoopContext {
     size_t *break_jumps;
     int break_count;
     int break_cap;
+    int locals_before_loop;
+    int locals_at_loop_start;
+    int try_depth;
     struct LoopContext *enclosing;
 } LoopContext;
 
@@ -27,6 +30,8 @@ struct CodeGen {
     Chunk *chunk;
     LocalVarList locals;
     int in_function;
+    int had_error;
+    int try_depth;
     Stmt **struct_decls;
     int struct_decl_count;
     int struct_decl_cap;
@@ -616,8 +621,12 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
                 if (func_idx >= 0) {
                     LocalVarList saved_locals = gen->locals;
                     int saved_in_func = gen->in_function;
+                    LoopContext *saved_loop = gen->current_loop;
+                    int saved_try_depth = gen->try_depth;
                     local_vars_init(&gen->locals);
                     gen->in_function = 1;
+                    gen->current_loop = NULL;
+                    gen->try_depth = 0;
 
                     /* Slot 0 is already 'self' from parser */
                     for (int p = 0; p < m->as.func_decl.params.count; p++) {
@@ -632,6 +641,8 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
                     local_vars_free(&gen->locals);
                     gen->locals = saved_locals;
                     gen->in_function = saved_in_func;
+                    gen->current_loop = saved_loop;
+                    gen->try_depth = saved_try_depth;
                 }
 
                 size_t after_method = gen->chunk->code_len;
@@ -669,6 +680,7 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
         }
 
         case STMT_LOOP_TILL: {
+            int locals_before_loop = gen->locals.count;
             size_t loop_start = gen->chunk->code_len;
             codegen_expr(gen, stmt->as.loop_till.condition);
             chunk_write_op(gen->chunk, OP_NOT);
@@ -682,6 +694,9 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
             loop_ctx.enclosing = gen->current_loop;
             loop_ctx.continue_target = loop_start;
             loop_ctx.has_continue_target = 1;
+            loop_ctx.locals_before_loop = locals_before_loop;
+            loop_ctx.locals_at_loop_start = locals_before_loop;
+            loop_ctx.try_depth = gen->try_depth;
             gen->current_loop = &loop_ctx;
 
             codegen_stmt_list(gen, &stmt->as.loop_till.body);
@@ -689,10 +704,16 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
             chunk_write_op(gen->chunk, OP_JUMP);
             chunk_write_operand(gen->chunk, (uint32_t)loop_start);
 
-            size_t end_addr = gen->chunk->code_len;
-            chunk_patch_operand(gen->chunk, jump_addr + 1, (uint32_t)end_addr);
+            size_t cleanup_addr = gen->chunk->code_len;
+            chunk_patch_operand(gen->chunk, jump_addr + 1, (uint32_t)cleanup_addr);
+
+            while (gen->locals.count > locals_before_loop) {
+                local_vars_pop(gen);
+            }
+
+            size_t after_cleanup = gen->chunk->code_len;
             for (int b = 0; b < loop_ctx.break_count; b++) {
-                chunk_patch_operand(gen->chunk, loop_ctx.break_jumps[b] + 1, (uint32_t)end_addr);
+                chunk_patch_operand(gen->chunk, loop_ctx.break_jumps[b] + 1, (uint32_t)after_cleanup);
             }
             free(loop_ctx.break_jumps);
             free(loop_ctx.continue_jumps);
@@ -701,6 +722,7 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
         }
 
         case STMT_LOOP_WHILE: {
+            int locals_before_loop = gen->locals.count;
             size_t loop_start = gen->chunk->code_len;
             codegen_expr(gen, stmt->as.loop_while.condition);
 
@@ -713,6 +735,9 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
             loop_ctx.enclosing = gen->current_loop;
             loop_ctx.continue_target = loop_start;
             loop_ctx.has_continue_target = 1;
+            loop_ctx.locals_before_loop = locals_before_loop;
+            loop_ctx.locals_at_loop_start = locals_before_loop;
+            loop_ctx.try_depth = gen->try_depth;
             gen->current_loop = &loop_ctx;
 
             codegen_stmt_list(gen, &stmt->as.loop_while.body);
@@ -720,10 +745,16 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
             chunk_write_op(gen->chunk, OP_JUMP);
             chunk_write_operand(gen->chunk, (uint32_t)loop_start);
 
-            size_t end_addr = gen->chunk->code_len;
-            chunk_patch_operand(gen->chunk, jump_addr + 1, (uint32_t)end_addr);
+            size_t cleanup_addr = gen->chunk->code_len;
+            chunk_patch_operand(gen->chunk, jump_addr + 1, (uint32_t)cleanup_addr);
+
+            while (gen->locals.count > locals_before_loop) {
+                local_vars_pop(gen);
+            }
+
+            size_t after_cleanup = gen->chunk->code_len;
             for (int b = 0; b < loop_ctx.break_count; b++) {
-                chunk_patch_operand(gen->chunk, loop_ctx.break_jumps[b] + 1, (uint32_t)end_addr);
+                chunk_patch_operand(gen->chunk, loop_ctx.break_jumps[b] + 1, (uint32_t)after_cleanup);
             }
             free(loop_ctx.break_jumps);
             free(loop_ctx.continue_jumps);
@@ -732,6 +763,7 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
         }
 
         case STMT_LOOP_RANGE: {
+            int locals_before_loop = gen->locals.count;
             codegen_expr(gen, stmt->as.loop_range.from);
             int loop_var = local_vars_add(&gen->locals, stmt->as.loop_range.var_name);
             chunk_write_op(gen->chunk, OP_DEFINE_LOCAL);
@@ -742,6 +774,7 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
             chunk_write_op(gen->chunk, OP_DEFINE_LOCAL);
             chunk_write_operand(gen->chunk, (uint32_t)limit_var);
 
+            int locals_at_loop_start = gen->locals.count;
             size_t loop_start = gen->chunk->code_len;
             chunk_write_op(gen->chunk, OP_GET_LOCAL);
             chunk_write_operand(gen->chunk, (uint32_t)loop_var);
@@ -756,6 +789,9 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
             LoopContext loop_ctx;
             memset(&loop_ctx, 0, sizeof(loop_ctx));
             loop_ctx.enclosing = gen->current_loop;
+            loop_ctx.locals_before_loop = locals_before_loop;
+            loop_ctx.locals_at_loop_start = locals_at_loop_start;
+            loop_ctx.try_depth = gen->try_depth;
             gen->current_loop = &loop_ctx;
 
             codegen_stmt_list(gen, &stmt->as.loop_range.body);
@@ -774,21 +810,25 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
             chunk_write_op(gen->chunk, OP_JUMP);
             chunk_write_operand(gen->chunk, (uint32_t)loop_start);
 
-            size_t end_addr = gen->chunk->code_len;
-            chunk_patch_operand(gen->chunk, jump_addr + 1, (uint32_t)end_addr);
+            size_t cleanup_addr = gen->chunk->code_len;
+            chunk_patch_operand(gen->chunk, jump_addr + 1, (uint32_t)cleanup_addr);
+
+            while (gen->locals.count > locals_before_loop) {
+                local_vars_pop(gen);
+            }
+
+            size_t after_cleanup = gen->chunk->code_len;
             for (int b = 0; b < loop_ctx.break_count; b++) {
-                chunk_patch_operand(gen->chunk, loop_ctx.break_jumps[b] + 1, (uint32_t)end_addr);
+                chunk_patch_operand(gen->chunk, loop_ctx.break_jumps[b] + 1, (uint32_t)after_cleanup);
             }
             free(loop_ctx.break_jumps);
             free(loop_ctx.continue_jumps);
             gen->current_loop = loop_ctx.enclosing;
-
-            local_vars_pop(gen);
-            local_vars_pop(gen);
             break;
         }
 
         case STMT_LOOP_THROUGH: {
+            int locals_before_loop = gen->locals.count;
             codegen_expr(gen, stmt->as.loop_through.collection);
 
             int array_var = local_vars_add(&gen->locals, "__array_temp");
@@ -806,6 +846,7 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
             chunk_write_op(gen->chunk, OP_DEFINE_LOCAL);
             chunk_write_operand(gen->chunk, (uint32_t)item_var);
 
+            int locals_at_loop_start = gen->locals.count;
             size_t loop_start = gen->chunk->code_len;
 
             chunk_write_op(gen->chunk, OP_GET_LOCAL);
@@ -830,6 +871,9 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
             LoopContext loop_ctx;
             memset(&loop_ctx, 0, sizeof(loop_ctx));
             loop_ctx.enclosing = gen->current_loop;
+            loop_ctx.locals_before_loop = locals_before_loop;
+            loop_ctx.locals_at_loop_start = locals_at_loop_start;
+            loop_ctx.try_depth = gen->try_depth;
             gen->current_loop = &loop_ctx;
 
             codegen_stmt_list(gen, &stmt->as.loop_through.body);
@@ -848,25 +892,36 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
             chunk_write_op(gen->chunk, OP_JUMP);
             chunk_write_operand(gen->chunk, (uint32_t)loop_start);
 
-            size_t end_addr = gen->chunk->code_len;
-            chunk_patch_operand(gen->chunk, jump_addr + 1, (uint32_t)end_addr);
+            size_t cleanup_addr = gen->chunk->code_len;
+            chunk_patch_operand(gen->chunk, jump_addr + 1, (uint32_t)cleanup_addr);
+
+            while (gen->locals.count > locals_before_loop) {
+                local_vars_pop(gen);
+            }
+
+            size_t after_cleanup = gen->chunk->code_len;
             for (int b = 0; b < loop_ctx.break_count; b++) {
-                chunk_patch_operand(gen->chunk, loop_ctx.break_jumps[b] + 1, (uint32_t)end_addr);
+                chunk_patch_operand(gen->chunk, loop_ctx.break_jumps[b] + 1, (uint32_t)after_cleanup);
             }
             free(loop_ctx.break_jumps);
             free(loop_ctx.continue_jumps);
             gen->current_loop = loop_ctx.enclosing;
-
-            local_vars_pop(gen);
-            local_vars_pop(gen);
-            local_vars_pop(gen);
             break;
         }
 
         case STMT_BREAK: {
             if (!gen->current_loop) {
                 fprintf(stderr, "Compilation error: 'break' outside of loop\n");
+                gen->had_error = 1;
                 return;
+            }
+            int try_diff = gen->try_depth - gen->current_loop->try_depth;
+            for (int t = 0; t < try_diff; t++) {
+                chunk_write_op(gen->chunk, OP_TRY_END);
+            }
+            int local_diff = gen->locals.count - gen->current_loop->locals_before_loop;
+            for (int l = 0; l < local_diff; l++) {
+                chunk_write_op(gen->chunk, OP_POP);
             }
             size_t break_addr = gen->chunk->code_len;
             chunk_write_op(gen->chunk, OP_JUMP);
@@ -878,7 +933,16 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
         case STMT_CONTINUE: {
             if (!gen->current_loop) {
                 fprintf(stderr, "Compilation error: 'continue' outside of loop\n");
+                gen->had_error = 1;
                 return;
+            }
+            int try_diff = gen->try_depth - gen->current_loop->try_depth;
+            for (int t = 0; t < try_diff; t++) {
+                chunk_write_op(gen->chunk, OP_TRY_END);
+            }
+            int local_diff = gen->locals.count - gen->current_loop->locals_at_loop_start;
+            for (int l = 0; l < local_diff; l++) {
+                chunk_write_op(gen->chunk, OP_POP);
             }
             if (gen->current_loop->has_continue_target) {
                 chunk_write_op(gen->chunk, OP_JUMP);
@@ -918,8 +982,12 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
             if (func_idx >= 0) {
                 LocalVarList saved_locals = gen->locals;
                 int saved_in_func = gen->in_function;
+                LoopContext *saved_loop = gen->current_loop;
+                int saved_try_depth = gen->try_depth;
                 local_vars_init(&gen->locals);
                 gen->in_function = 1;
+                gen->current_loop = NULL;
+                gen->try_depth = 0;
 
                 for (int i = 0; i < stmt->as.func_decl.params.count; i++) {
                     local_vars_add(&gen->locals, stmt->as.func_decl.params.items[i]);
@@ -933,6 +1001,8 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
                 local_vars_free(&gen->locals);
                 gen->locals = saved_locals;
                 gen->in_function = saved_in_func;
+                gen->current_loop = saved_loop;
+                gen->try_depth = saved_try_depth;
             }
 
             size_t after_func = gen->chunk->code_len;
@@ -941,6 +1011,11 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
         }
 
         case STMT_RETURN:
+            if (!gen->in_function) {
+                fprintf(stderr, "Compilation error: 'return' outside of function\n");
+                gen->had_error = 1;
+                return;
+            }
             if (stmt->as.return_stmt.value) {
                 codegen_expr(gen, stmt->as.return_stmt.value);
             } else {
@@ -961,7 +1036,9 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
             chunk_write_op(gen->chunk, OP_TRY_BEGIN);
             chunk_write_operand(gen->chunk, 0);
 
+            gen->try_depth++;
             codegen_stmt_list(gen, &stmt->as.try_catch.try_body);
+            gen->try_depth--;
 
             chunk_write_op(gen->chunk, OP_TRY_END);
 
@@ -1073,6 +1150,8 @@ Chunk *codegen_compile(CodeGen *gen, Stmt **statements, int count) {
     local_vars_clear(&gen->locals);
     gen->in_function = 0;
     gen->current_loop = NULL;
+    gen->had_error = 0;
+    gen->try_depth = 0;
 
     module_system_init();
     codegen_prepass_imports_and_funcs(gen, statements, count, 0);
@@ -1081,6 +1160,10 @@ Chunk *codegen_compile(CodeGen *gen, Stmt **statements, int count) {
 
     for (int i = 0; i < count; i++) {
         codegen_stmt(gen, statements[i]);
+    }
+
+    if (gen->had_error) {
+        return NULL;
     }
 
     int main_idx = chunk_find_function(gen->chunk, "main");

@@ -349,6 +349,15 @@ grep -Fxq "eval_ok" "$OUTPUT" || failed
 ./vesbo --vm -e 'output "eval_vm_ok"' > "$OUTPUT" 2>&1 || failed
 grep -Fxq "eval_vm_ok" "$OUTPUT" || failed
 
+set_test "Test 31: Regressions test suite (break in try, VM loop scoping, builtin checks, replace)"
+./vesbo tests/regressions_test.vsb > "$OUTPUT" 2>&1 || failed
+grep -Fxq "REGRESSIONS_PASS" "$OUTPUT" || failed
+./vesbo --vm tests/regressions_test.vsb > "$OUTPUT" 2>&1 || failed
+grep -Fxq "REGRESSIONS_PASS" "$OUTPUT" || failed
+./vesbo --gc-stress tests/regressions_test.vsb > "$OUTPUT" 2>&1 || failed
+grep -Fxq "REGRESSIONS_PASS" "$OUTPUT" || failed
+./vesbo --gc-stress --vm tests/regressions_test.vsb > "$OUTPUT" 2>&1 || failed
+grep -Fxq "REGRESSIONS_PASS" "$OUTPUT" || failed
 
 echo "All Vesbo smoke tests passed."
 exit 0

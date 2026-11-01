@@ -366,6 +366,22 @@ findstr /x /c:"eval_ok" "%OUTPUT%" >nul || goto :failed
 if errorlevel 1 goto :failed
 findstr /x /c:"eval_vm_ok" "%OUTPUT%" >nul || goto :failed
 
+REM Test 31: Regressions test suite (break in try, VM loop scoping, builtin checks, replace)
+"%ROOT%\vesbo.exe" "%~dp0regressions_test.vsb" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"REGRESSIONS_PASS" "%OUTPUT%" >nul || goto :failed
+
+"%ROOT%\vesbo.exe" --vm "%~dp0regressions_test.vsb" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"REGRESSIONS_PASS" "%OUTPUT%" >nul || goto :failed
+
+"%ROOT%\vesbo.exe" --gc-stress "%~dp0regressions_test.vsb" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"REGRESSIONS_PASS" "%OUTPUT%" >nul || goto :failed
+
+"%ROOT%\vesbo.exe" --gc-stress --vm "%~dp0regressions_test.vsb" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"REGRESSIONS_PASS" "%OUTPUT%" >nul || goto :failed
 
 del "%OUTPUT%" >nul 2>nul
 echo All Vesbo smoke tests passed.
