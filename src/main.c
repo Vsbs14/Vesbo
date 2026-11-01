@@ -11,8 +11,15 @@
 #include "../include/disassemble.h"
 #include "../include/repl.h"
 #include "../include/module.h"
+#include "../include/vesbo.h"
 
 #define VESBO_VERSION "0.2.0"
+
+static void maybe_print_profile_at_exit(void) {
+    if (gc_get_profile()) {
+        gc_print_profile_report();
+    }
+}
 
 static char *read_file(const char *path) {
     FILE *f = fopen(path, "rb");
@@ -29,7 +36,7 @@ static char *read_file(const char *path) {
     }
     fseek(f, 0, SEEK_SET);
 
-    char *buffer = malloc(size + 1);
+    char *buffer = malloc((size_t)size + 1);
     if (!buffer) {
         fprintf(stderr, "Could not allocate memory for: %s\n", path);
         fclose(f);
@@ -47,47 +54,111 @@ static char *read_file(const char *path) {
     return buffer;
 }
 
+static void write_str(FILE *f, const char *s) {
+    if (!s) s = "";
+    uint32_t len = (uint32_t)strlen(s);
+    fwrite(&len, sizeof(uint32_t), 1, f);
+    if (len > 0) fwrite(s, 1, len, f);
+}
+
+static char *read_str(FILE *f) {
+    uint32_t len = 0;
+    if (fread(&len, sizeof(uint32_t), 1, f) != 1) return NULL;
+    char *s = malloc((size_t)len + 1);
+    if (!s) return NULL;
+    if (len > 0 && fread(s, 1, len, f) != len) {
+        free(s);
+        return NULL;
+    }
+    s[len] = '\0';
+    return s;
+}
+
 static int write_bytecode(Chunk *chunk, const char *output_path) {
     FILE *f = fopen(output_path, "wb");
     if (!f) {
         fprintf(stderr, "Could not open output file: %s\n", output_path);
         return 0;
     }
-    
+
     /* Write magic header */
-    fprintf(f, "VSBX");
-    
+    fprintf(f, "VSB2");
+
     /* Write code section */
     uint32_t code_len = (uint32_t)chunk->code_len;
     fwrite(&code_len, sizeof(uint32_t), 1, f);
     fwrite(chunk->code, 1, code_len, f);
-    
+
     /* Write numbers section */
     uint32_t num_count = (uint32_t)chunk->numbers_len;
     fwrite(&num_count, sizeof(uint32_t), 1, f);
     for (size_t i = 0; i < chunk->numbers_len; i++) {
         fwrite(&chunk->numbers[i], sizeof(double), 1, f);
     }
-    
+
     /* Write strings section */
     uint32_t str_count = (uint32_t)chunk->strings_len;
     fwrite(&str_count, sizeof(uint32_t), 1, f);
     for (size_t i = 0; i < chunk->strings_len; i++) {
-        uint32_t str_len = (uint32_t)strlen(chunk->strings[i]);
-        fwrite(&str_len, sizeof(uint32_t), 1, f);
-        fwrite(chunk->strings[i], 1, str_len, f);
+        write_str(f, chunk->strings[i]);
     }
 
     /* Write functions section */
     uint32_t func_count = (uint32_t)chunk->functions_len;
     fwrite(&func_count, sizeof(uint32_t), 1, f);
     for (size_t i = 0; i < chunk->functions_len; i++) {
-        uint32_t name_len = (uint32_t)strlen(chunk->functions[i].name);
-        fwrite(&name_len, sizeof(uint32_t), 1, f);
-        fwrite(chunk->functions[i].name, 1, name_len, f);
+        write_str(f, chunk->functions[i].name);
         fwrite(&chunk->functions[i].code_offset, sizeof(uint32_t), 1, f);
         int32_t param_count = (int32_t)chunk->functions[i].param_count;
         fwrite(&param_count, sizeof(int32_t), 1, f);
+        write_str(f, chunk->functions[i].file);
+        int32_t line = (int32_t)chunk->functions[i].line;
+        int32_t col = (int32_t)chunk->functions[i].column;
+        fwrite(&line, sizeof(int32_t), 1, f);
+        fwrite(&col, sizeof(int32_t), 1, f);
+    }
+
+    /* Write globals section */
+    uint32_t glob_count = (uint32_t)chunk->globals_len;
+    fwrite(&glob_count, sizeof(uint32_t), 1, f);
+    for (size_t i = 0; i < chunk->globals_len; i++) {
+        write_str(f, chunk->global_names[i]);
+    }
+
+    /* Write structs section */
+    uint32_t struct_count = (uint32_t)chunk->structs_len;
+    fwrite(&struct_count, sizeof(uint32_t), 1, f);
+    for (size_t i = 0; i < chunk->structs_len; i++) {
+        ChunkStructDef *s = &chunk->structs[i];
+        write_str(f, s->name);
+        int32_t fcount = (int32_t)s->field_count;
+        fwrite(&fcount, sizeof(int32_t), 1, f);
+        for (int j = 0; j < s->field_count; j++) {
+            write_str(f, s->field_names[j]);
+            Value dv = s->field_defaults[j];
+            uint8_t tag = (uint8_t)dv.type;
+            fwrite(&tag, sizeof(uint8_t), 1, f);
+            if (dv.type == VAL_NUMBER) {
+                fwrite(&dv.as.number, sizeof(double), 1, f);
+            } else if (dv.type == VAL_BOOL) {
+                uint8_t b = (uint8_t)(dv.as.boolean ? 1 : 0);
+                fwrite(&b, sizeof(uint8_t), 1, f);
+            } else if (dv.type == VAL_STRING) {
+                write_str(f, dv.as.string);
+            }
+        }
+    }
+
+    /* Write source locations section */
+    uint32_t loc_count = (uint32_t)chunk->locs_len;
+    fwrite(&loc_count, sizeof(uint32_t), 1, f);
+    for (size_t i = 0; i < chunk->locs_len; i++) {
+        fwrite(&chunk->locs[i].code_offset, sizeof(uint32_t), 1, f);
+        fwrite(&chunk->locs[i].file_str_idx, sizeof(uint32_t), 1, f);
+        int32_t line = (int32_t)chunk->locs[i].line;
+        int32_t col = (int32_t)chunk->locs[i].column;
+        fwrite(&line, sizeof(int32_t), 1, f);
+        fwrite(&col, sizeof(int32_t), 1, f);
     }
 
     fclose(f);
@@ -103,6 +174,9 @@ static void print_usage(const char *prog_name) {
     fprintf(stderr, "  -o, --output <file>      Output file (used with -c)\n");
     fprintf(stderr, "  -d, --disassemble        Disassemble .vsb source or .vbo bytecode\n");
     fprintf(stderr, "  -i, --repl               Start interactive REPL session\n");
+    fprintf(stderr, "  --vm                     Run .vsb source directly in the bytecode VM\n");
+    fprintf(stderr, "  --gc-stress              Trigger garbage collection on every allocation\n");
+    fprintf(stderr, "  --profile                Print instruction and allocation profile at exit\n");
     fprintf(stderr, "  -v, --version            Show version information\n");
     fprintf(stderr, "  -h, --help               Show this help message\n");
     fprintf(stderr, "\nExamples:\n");
@@ -121,141 +195,211 @@ static Chunk *load_bytecode(const char *path) {
         fprintf(stderr, "Could not open bytecode file: %s\n", path);
         return NULL;
     }
-    
+
     Chunk *chunk = chunk_new();
     if (!chunk) {
         fclose(f);
         return NULL;
     }
-    
-    /* Check magic header */
+
     char magic[4];
-    if (fread(magic, 1, 4, f) != 4 || strncmp(magic, "VSBX", 4) != 0) {
+    if (fread(magic, 1, 4, f) != 4) {
         fprintf(stderr, "Invalid bytecode file: %s\n", path);
         chunk_free(chunk);
         fclose(f);
         return NULL;
     }
-    
-    /* Read code section */
+    if (strncmp(magic, "VSBX", 4) == 0) {
+        fprintf(stderr, "Outdated bytecode format (VSBX) in '%s'; please recompile with 'vesbo -c'\n", path);
+        chunk_free(chunk);
+        fclose(f);
+        return NULL;
+    }
+    if (strncmp(magic, "VSB2", 4) != 0) {
+        fprintf(stderr, "Invalid bytecode file: %s\n", path);
+        chunk_free(chunk);
+        fclose(f);
+        return NULL;
+    }
+    int is_v2 = 1;
+
     uint32_t code_len;
     if (fread(&code_len, sizeof(uint32_t), 1, f) != 1) {
-        fprintf(stderr, "Invalid bytecode file: cannot read code length\n");
         chunk_free(chunk);
         fclose(f);
         return NULL;
-    }
-    
-    free(chunk->code);
-    chunk->code = malloc(code_len > 0 ? code_len : 1);
-    chunk->code_cap = code_len;
-    chunk->code_len = code_len;
-    if (code_len > 0 && fread(chunk->code, 1, code_len, f) != code_len) {
-        fprintf(stderr, "Invalid bytecode file: cannot read code\n");
-        chunk_free(chunk);
-        fclose(f);
-        return NULL;
-    }
-    
-    /* Read numbers section */
-    uint32_t num_count;
-    if (fread(&num_count, sizeof(uint32_t), 1, f) != 1) {
-        fprintf(stderr, "Invalid bytecode file: cannot read number count\n");
-        chunk_free(chunk);
-        fclose(f);
-        return NULL;
-    }
-    
-    free(chunk->numbers);
-    chunk->numbers = malloc((num_count > 0 ? num_count : 1) * sizeof(double));
-    chunk->numbers_cap = num_count;
-    chunk->numbers_len = num_count;
-    if (num_count > 0 && fread(chunk->numbers, sizeof(double), num_count, f) != num_count) {
-        fprintf(stderr, "Invalid bytecode file: cannot read numbers\n");
-        chunk_free(chunk);
-        fclose(f);
-        return NULL;
-    }
-    
-    /* Read strings section */
-    uint32_t str_count;
-    if (fread(&str_count, sizeof(uint32_t), 1, f) != 1) {
-        fprintf(stderr, "Invalid bytecode file: cannot read string count\n");
-        chunk_free(chunk);
-        fclose(f);
-        return NULL;
-    }
-    
-    for (size_t i = 0; i < chunk->strings_len; i++) {
-        free(chunk->strings[i]);
-    }
-    free(chunk->strings);
-    chunk->strings = malloc((str_count > 0 ? str_count : 1) * sizeof(char *));
-    chunk->strings_cap = str_count;
-    chunk->strings_len = 0;
-    
-    for (uint32_t i = 0; i < str_count; i++) {
-        uint32_t str_len;
-        if (fread(&str_len, sizeof(uint32_t), 1, f) != 1) {
-            fprintf(stderr, "Invalid bytecode file: cannot read string length\n");
-            chunk_free(chunk);
-            fclose(f);
-            return NULL;
-        }
-        
-        char *str = malloc(str_len + 1);
-        if (fread(str, 1, str_len, f) != str_len) {
-            fprintf(stderr, "Invalid bytecode file: cannot read string\n");
-            free(str);
-            chunk_free(chunk);
-            fclose(f);
-            return NULL;
-        }
-        str[str_len] = '\0';
-        chunk->strings[chunk->strings_len++] = str;
     }
 
-    /* Read functions section */
+    free(chunk->code);
+    chunk->code = malloc(code_len > 0 ? code_len : 1);
+    chunk->code_cap = code_len > 0 ? code_len : 1;
+    chunk->code_len = code_len;
+    if (code_len > 0 && fread(chunk->code, 1, code_len, f) != code_len) {
+        chunk_free(chunk);
+        fclose(f);
+        return NULL;
+    }
+
+    uint32_t num_count;
+    if (fread(&num_count, sizeof(uint32_t), 1, f) != 1) {
+        chunk_free(chunk);
+        fclose(f);
+        return NULL;
+    }
+
+    free(chunk->numbers);
+    chunk->numbers = malloc((num_count > 0 ? num_count : 1) * sizeof(double));
+    chunk->numbers_cap = num_count > 0 ? num_count : 1;
+    chunk->numbers_len = num_count;
+    if (num_count > 0 && fread(chunk->numbers, sizeof(double), num_count, f) != num_count) {
+        chunk_free(chunk);
+        fclose(f);
+        return NULL;
+    }
+
+    uint32_t str_count;
+    if (fread(&str_count, sizeof(uint32_t), 1, f) != 1) {
+        chunk_free(chunk);
+        fclose(f);
+        return NULL;
+    }
+
+    for (size_t i = 0; i < chunk->strings_len; i++) free(chunk->strings[i]);
+    free(chunk->strings);
+    free(chunk->string_objs);
+    size_t scap = str_count > 0 ? str_count : 1;
+    chunk->strings = malloc(scap * sizeof(char *));
+    chunk->string_objs = calloc(scap, sizeof(ObjString *));
+    chunk->strings_cap = scap;
+    chunk->strings_len = 0;
+
+    for (uint32_t i = 0; i < str_count; i++) {
+        char *str = read_str(f);
+        if (!str) {
+            chunk_free(chunk);
+            fclose(f);
+            return NULL;
+        }
+        size_t idx = chunk->strings_len++;
+        chunk->strings[idx] = str;
+        chunk->string_objs[idx] = intern_string(str, strlen(str));
+    }
+
     uint32_t func_count;
     if (fread(&func_count, sizeof(uint32_t), 1, f) != 1) {
-        fprintf(stderr, "Invalid bytecode file: cannot read function count\n");
         chunk_free(chunk);
         fclose(f);
         return NULL;
     }
 
     for (uint32_t i = 0; i < func_count; i++) {
-        uint32_t name_len;
-        if (fread(&name_len, sizeof(uint32_t), 1, f) != 1) {
-            fprintf(stderr, "Invalid bytecode file: cannot read function name length\n");
+        char *name = read_str(f);
+        if (!name) {
             chunk_free(chunk);
             fclose(f);
             return NULL;
         }
-
-        char *name = malloc(name_len + 1);
-        if (fread(name, 1, name_len, f) != name_len) {
-            fprintf(stderr, "Invalid bytecode file: cannot read function name\n");
-            free(name);
-            chunk_free(chunk);
-            fclose(f);
-            return NULL;
-        }
-        name[name_len] = '\0';
-
-        uint32_t code_offset;
-        int32_t param_count;
+        uint32_t code_offset = 0;
+        int32_t param_count = 0;
         if (fread(&code_offset, sizeof(uint32_t), 1, f) != 1 ||
             fread(&param_count, sizeof(int32_t), 1, f) != 1) {
-            fprintf(stderr, "Invalid bytecode file: cannot read function metadata\n");
             free(name);
             chunk_free(chunk);
             fclose(f);
             return NULL;
         }
-
-        chunk_add_function(chunk, name, code_offset, param_count);
+        char *file = NULL;
+        int32_t line = 0, col = 0;
+        if (is_v2) {
+            file = read_str(f);
+            if (!file ||
+                fread(&line, sizeof(int32_t), 1, f) != 1 ||
+                fread(&col, sizeof(int32_t), 1, f) != 1) {
+                free(name);
+                free(file);
+                chunk_free(chunk);
+                fclose(f);
+                return NULL;
+            }
+        }
+        chunk_add_function_loc(chunk, name, code_offset, param_count, file, line, col);
         free(name);
+        free(file);
+    }
+
+    if (is_v2) {
+        /* Read globals */
+        uint32_t glob_count = 0;
+        if (fread(&glob_count, sizeof(uint32_t), 1, f) == 1) {
+            for (uint32_t i = 0; i < glob_count; i++) {
+                char *gname = read_str(f);
+                if (gname) {
+                    chunk_resolve_global(chunk, gname);
+                    free(gname);
+                }
+            }
+        }
+
+        /* Read structs */
+        uint32_t struct_count = 0;
+        if (fread(&struct_count, sizeof(uint32_t), 1, f) == 1) {
+            for (uint32_t i = 0; i < struct_count; i++) {
+                char *sname = read_str(f);
+                int32_t fcount = 0;
+                if (!sname || fread(&fcount, sizeof(int32_t), 1, f) != 1) {
+                    free(sname);
+                    break;
+                }
+                char **fnames = fcount > 0 ? malloc((size_t)fcount * sizeof(char *)) : NULL;
+                Value *fdefaults = fcount > 0 ? malloc((size_t)fcount * sizeof(Value)) : NULL;
+                for (int32_t j = 0; j < fcount; j++) {
+                    fnames[j] = read_str(f);
+                    uint8_t tag = (uint8_t)VAL_NONE;
+                    fread(&tag, sizeof(uint8_t), 1, f);
+                    if (tag == (uint8_t)VAL_NUMBER) {
+                        double num = 0.0;
+                        fread(&num, sizeof(double), 1, f);
+                        fdefaults[j] = make_number_value(num);
+                    } else if (tag == (uint8_t)VAL_BOOL) {
+                        uint8_t b = 0;
+                        fread(&b, sizeof(uint8_t), 1, f);
+                        fdefaults[j] = make_bool_value(b != 0);
+                    } else if (tag == (uint8_t)VAL_STRING) {
+                        char *sv = read_str(f);
+                        fdefaults[j] = make_string_value(sv ? sv : "");
+                        free(sv);
+                    } else {
+                        fdefaults[j] = make_none_value();
+                    }
+                }
+                chunk_add_struct(chunk, sname, fcount, fnames, fdefaults);
+                for (int32_t j = 0; j < fcount; j++) free(fnames[j]);
+                free(fnames);
+                free(fdefaults);
+                free(sname);
+            }
+        }
+
+        /* Read source locations */
+        uint32_t loc_count = 0;
+        if (fread(&loc_count, sizeof(uint32_t), 1, f) == 1 && loc_count > 0) {
+            free(chunk->locs);
+            chunk->locs = malloc((size_t)loc_count * sizeof(BytecodeLoc));
+            chunk->locs_cap = loc_count;
+            chunk->locs_len = loc_count;
+            for (uint32_t i = 0; i < loc_count; i++) {
+                uint32_t coff = 0, fidx = 0;
+                int32_t line = 0, col = 0;
+                fread(&coff, sizeof(uint32_t), 1, f);
+                fread(&fidx, sizeof(uint32_t), 1, f);
+                fread(&line, sizeof(int32_t), 1, f);
+                fread(&col, sizeof(int32_t), 1, f);
+                chunk->locs[i].code_offset = coff;
+                chunk->locs[i].file_str_idx = fidx;
+                chunk->locs[i].line = line;
+                chunk->locs[i].column = col;
+            }
+        }
     }
 
     fclose(f);
@@ -265,6 +409,7 @@ static Chunk *load_bytecode(const char *path) {
 int main(int argc, char **argv) {
     atexit(value_cleanup);
     atexit(module_system_cleanup);
+    atexit(maybe_print_profile_at_exit);
 
     if (argc < 2) {
         repl_start();
@@ -274,10 +419,10 @@ int main(int argc, char **argv) {
     int compile_mode = 0;
     int disassemble_mode = 0;
     int repl_mode = 0;
+    int vm_mode = 0;
     const char *source_file = NULL;
     const char *output_file = NULL;
 
-    /* Parse arguments */
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
             printf("Vesbo %s\n", VESBO_VERSION);
@@ -291,6 +436,12 @@ int main(int argc, char **argv) {
             disassemble_mode = 1;
         } else if (strcmp(argv[i], "-c") == 0 || strcmp(argv[i], "--compile") == 0) {
             compile_mode = 1;
+        } else if (strcmp(argv[i], "--vm") == 0) {
+            vm_mode = 1;
+        } else if (strcmp(argv[i], "--gc-stress") == 0) {
+            gc_set_stress(1);
+        } else if (strcmp(argv[i], "--profile") == 0) {
+            gc_set_profile(1);
         } else if (strcmp(argv[i], "-o") == 0 || strcmp(argv[i], "--output") == 0) {
             if (i + 1 < argc) {
                 output_file = argv[++i];
@@ -318,16 +469,15 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    /* Check if it's a bytecode file */
     size_t len = strlen(source_file);
     int is_bytecode = len > 4 && strcmp(source_file + len - 4, ".vbo") == 0;
-    
+
     if (is_bytecode) {
         Chunk *chunk = load_bytecode(source_file);
         if (!chunk) {
             return 1;
         }
-        
+
         if (disassemble_mode) {
             disassemble_chunk(chunk, source_file);
             chunk_free(chunk);
@@ -339,26 +489,29 @@ int main(int argc, char **argv) {
             chunk_free(chunk);
             return 1;
         }
-        
+
         VM *vm = vm_new(chunk);
         if (!vm) {
             fprintf(stderr, "Failed to create virtual machine\n");
             chunk_free(chunk);
             return 1;
         }
-        
+
         int result = vm_execute(vm);
         vm_free(vm);
         chunk_free(chunk);
         return result;
     }
 
-    /* Generate output file name if not provided */
-    char default_output[256];
+    char default_output[4096];
     if (compile_mode && !output_file) {
-        strcpy(default_output, source_file);
+        strncpy(default_output, source_file, sizeof(default_output) - 5);
+        default_output[sizeof(default_output) - 5] = '\0';
         char *dot = strrchr(default_output, '.');
-        if (dot) *dot = '\0';
+        char *slash1 = strrchr(default_output, '/');
+        char *slash2 = strrchr(default_output, '\\');
+        char *slash = (slash1 > slash2) ? slash1 : slash2;
+        if (dot && (!slash || dot > slash)) *dot = '\0';
         strcat(default_output, ".vbo");
         output_file = default_output;
     }
@@ -369,8 +522,7 @@ int main(int argc, char **argv) {
     lexer_init(source);
     StmtList program = parse_program();
 
-    if (compile_mode || disassemble_mode) {
-        /* Compile to bytecode */
+    if (compile_mode || disassemble_mode || vm_mode) {
         CodeGen *gen = codegen_new();
         if (!gen) {
             fprintf(stderr, "Failed to create code generator\n");
@@ -395,6 +547,14 @@ int main(int argc, char **argv) {
         int ok = 1;
         if (compile_mode) {
             ok = write_bytecode(chunk, output_file);
+        } else if (vm_mode && !disassemble_mode) {
+            VM *vm = vm_new(chunk);
+            if (!vm) {
+                ok = 0;
+            } else {
+                ok = (vm_execute(vm) == 0);
+                vm_free(vm);
+            }
         }
 
         codegen_free(gen);
@@ -402,7 +562,6 @@ int main(int argc, char **argv) {
         free(source);
         return ok ? 0 : 1;
     } else {
-        /* Interpret directly */
         interpret_program(program);
     }
 

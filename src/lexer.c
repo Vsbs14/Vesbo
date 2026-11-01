@@ -9,6 +9,8 @@ typedef struct {
     int start;
     int current;
     int line;
+    int column;
+    int token_start_col;
     int at_line_start;
     int indent_stack[128];
     int indent_count;
@@ -44,6 +46,8 @@ void lexer_init(const char *source) {
     lexer.start = 0;
     lexer.current = 0;
     lexer.line = 1;
+    lexer.column = 1;
+    lexer.token_start_col = 1;
     lexer.at_line_start = 1;
     lexer.indent_stack[0] = 0;
     lexer.indent_count = 1;
@@ -56,6 +60,8 @@ LexerState lexer_get_state(void) {
     s.start = lexer.start;
     s.current = lexer.current;
     s.line = lexer.line;
+    s.column = lexer.column;
+    s.token_start_col = lexer.token_start_col;
     s.at_line_start = lexer.at_line_start;
     memcpy(s.indent_stack, lexer.indent_stack, sizeof(lexer.indent_stack));
     s.indent_count = lexer.indent_count;
@@ -68,20 +74,34 @@ void lexer_set_state(LexerState state) {
     lexer.start = state.start;
     lexer.current = state.current;
     lexer.line = state.line;
+    lexer.column = state.column;
+    lexer.token_start_col = state.token_start_col;
     lexer.at_line_start = state.at_line_start;
     memcpy(lexer.indent_stack, state.indent_stack, sizeof(lexer.indent_stack));
     lexer.indent_count = state.indent_count;
     lexer.pending_dedents = state.pending_dedents;
 }
 
-static char peek() { return lexer.source[lexer.current]; }
-static char advance() { return lexer.source[lexer.current++]; }
-static int is_at_end() { return peek() == '\0'; }
+static char peek(void) { return lexer.source[lexer.current]; }
+static char advance(void) {
+    char c = lexer.source[lexer.current++];
+    if (c == '\n') {
+        lexer.column = 1;
+    } else if (c == '\t') {
+        lexer.column += 4;
+    } else if (c != '\r') {
+        lexer.column++;
+    }
+    return c;
+}
+static int is_at_end(void) { return peek() == '\0'; }
 
 static Token make_token(TokenType type) {
     Token t;
     t.type = type;
     t.line = lexer.line;
+    t.column = lexer.token_start_col;
+    t.number_val = 0;
     int len = lexer.current - lexer.start;
     t.lexeme = malloc(len + 1);
     if (t.lexeme) {
@@ -94,13 +114,14 @@ static Token make_token(TokenType type) {
 
 static Token layout_token(TokenType type) {
     lexer.start = lexer.current;
+    lexer.token_start_col = lexer.column;
     return make_token(type);
 }
 
 static int handle_line_start(void) {
     int indentation = 0;
     while (peek() == ' ' || peek() == '\t' || peek() == '\r') {
-        indentation += peek() == '\t' ? 4 : 1;
+        indentation += peek() == '\t' ? 4 : (peek() == '\r' ? 0 : 1);
         advance();
     }
 
@@ -143,7 +164,7 @@ static Token string_token(char quote) {
     int len = 0;
     char *buf = malloc(cap);
     if (!buf) {
-        Token t = {TOKEN_ERROR, NULL, 0, lexer.line};
+        Token t = {TOKEN_ERROR, NULL, 0, lexer.line, lexer.token_start_col};
         return t;
     }
 
@@ -177,6 +198,7 @@ static Token string_token(char quote) {
     Token t;
     t.type = TOKEN_STRING;
     t.line = lexer.line;
+    t.column = lexer.token_start_col;
     t.lexeme = buf;
     t.number_val = 0;
     track_token_string(t.lexeme);
@@ -188,7 +210,7 @@ static Token interpolated_string_token(char quote) {
     int len = 0;
     char *buf = malloc(cap);
     if (!buf) {
-        Token t = {TOKEN_ERROR, NULL, 0, lexer.line};
+        Token t = {TOKEN_ERROR, NULL, 0, lexer.line, lexer.token_start_col};
         return t;
     }
 
@@ -272,17 +294,18 @@ static Token interpolated_string_token(char quote) {
     Token t;
     t.type = TOKEN_INTERPOLATED_STRING;
     t.line = lexer.line;
+    t.column = lexer.token_start_col;
     t.lexeme = buf;
     t.number_val = 0;
     track_token_string(t.lexeme);
     return t;
 }
 
-static Token number_token() {
-    while (isdigit(peek())) advance();
-    if (peek() == '.' && isdigit(lexer.source[lexer.current + 1])) {
+static Token number_token(void) {
+    while (isdigit((unsigned char)peek())) advance();
+    if (peek() == '.' && isdigit((unsigned char)lexer.source[lexer.current + 1])) {
         advance();
-        while (isdigit(peek())) advance();
+        while (isdigit((unsigned char)peek())) advance();
     }
     Token t = make_token(TOKEN_NUMBER);
     t.number_val = strtod(&lexer.source[lexer.start], NULL);
@@ -292,13 +315,14 @@ static Token number_token() {
 static int match_phrase_word(const char *expected) {
     int checkpoint_pos = lexer.current;
     int checkpoint_line = lexer.line;
+    int checkpoint_col = lexer.column;
 
     while (peek() == ' ' || peek() == '\t' || peek() == '\r') {
         advance();
     }
 
     int word_start = lexer.current;
-    while (isalnum(peek()) || peek() == '_') {
+    while (isalnum((unsigned char)peek()) || peek() == '_') {
         advance();
     }
     int word_len = lexer.current - word_start;
@@ -311,17 +335,20 @@ static int match_phrase_word(const char *expected) {
 
     lexer.current = checkpoint_pos;
     lexer.line = checkpoint_line;
+    lexer.column = checkpoint_col;
     return 0;
 }
 
-static Token handle_is_phrases() {
+static Token handle_is_phrases(void) {
     int checkpoint_pos = lexer.current;
     int checkpoint_line = lexer.line;
+    int checkpoint_col = lexer.column;
 
     if (match_phrase_word("less")) {
         if (match_phrase_word("than")) {
             int before_or = lexer.current;
             int before_or_line = lexer.line;
+            int before_or_col = lexer.column;
             if (match_phrase_word("or")) {
                 if (match_phrase_word("equal")) {
                     match_phrase_word("to");
@@ -329,12 +356,13 @@ static Token handle_is_phrases() {
                 }
                 lexer.current = before_or;
                 lexer.line = before_or_line;
+                lexer.column = before_or_col;
             }
             return make_token(TOKEN_LESS_THAN);
         }
-        // "less" matched but "than" didn't -- roll back the whole phrase
         lexer.current = checkpoint_pos;
         lexer.line = checkpoint_line;
+        lexer.column = checkpoint_col;
         return make_token(TOKEN_IS);
     }
 
@@ -342,6 +370,7 @@ static Token handle_is_phrases() {
         if (match_phrase_word("than")) {
             int before_or = lexer.current;
             int before_or_line = lexer.line;
+            int before_or_col = lexer.column;
             if (match_phrase_word("or")) {
                 if (match_phrase_word("equal")) {
                     match_phrase_word("to");
@@ -349,20 +378,23 @@ static Token handle_is_phrases() {
                 }
                 lexer.current = before_or;
                 lexer.line = before_or_line;
+                lexer.column = before_or_col;
             }
             return make_token(TOKEN_GREATER_THAN);
         }
         lexer.current = checkpoint_pos;
         lexer.line = checkpoint_line;
+        lexer.column = checkpoint_col;
         return make_token(TOKEN_IS);
     }
 
     return make_token(TOKEN_IS);
 }
 
-static Token handle_does_phrase() {
+static Token handle_does_phrase(void) {
     int checkpoint_pos = lexer.current;
     int checkpoint_line = lexer.line;
+    int checkpoint_col = lexer.column;
 
     if (match_phrase_word("not")) {
         if (match_phrase_word("equal")) {
@@ -372,11 +404,12 @@ static Token handle_does_phrase() {
 
     lexer.current = checkpoint_pos;
     lexer.line = checkpoint_line;
+    lexer.column = checkpoint_col;
     return make_token(TOKEN_IDENT);
 }
 
-static Token identifier_or_keyword_token() {
-    while (isalnum(peek()) || peek() == '_') advance();
+static Token identifier_or_keyword_token(void) {
+    while (isalnum((unsigned char)peek()) || peek() == '_') advance();
     int len = lexer.current - lexer.start;
     const char *text = &lexer.source[lexer.start];
 
@@ -389,6 +422,8 @@ static Token identifier_or_keyword_token() {
     if (len == 3 && strncmp(text, "set", 3) == 0) return make_token(TOKEN_SET);
     if (len == 2 && strncmp(text, "to", 2) == 0) return make_token(TOKEN_TO);
     if ((len == 3 && strncmp(text, "fnc", 3) == 0) || (len == 2 && strncmp(text, "ft", 2) == 0)) return make_token(TOKEN_FT);
+    if (len == 6 && strncmp(text, "struct", 6) == 0) return make_token(TOKEN_STRUCT);
+    if (len == 5 && strncmp(text, "yield", 5) == 0) return make_token(TOKEN_YIELD);
     if (len == 5 && strncmp(text, "gives", 5) == 0) return make_token(TOKEN_GIVES);
     if (len == 6 && strncmp(text, "return", 6) == 0) return make_token(TOKEN_RETURN);
     if (len == 2 && strncmp(text, "if", 2) == 0) return make_token(TOKEN_IF);
@@ -414,7 +449,7 @@ static Token identifier_or_keyword_token() {
     return make_token(TOKEN_IDENT);
 }
 
-Token lexer_next_token() {
+Token lexer_next_token(void) {
     for (;;) {
         if (lexer.pending_dedents > 0) {
             lexer.pending_dedents--;
@@ -438,6 +473,7 @@ Token lexer_next_token() {
     }
 
     lexer.start = lexer.current;
+    lexer.token_start_col = lexer.column;
 
     if (is_at_end()) {
         if (lexer.indent_count > 1) {
@@ -450,19 +486,20 @@ Token lexer_next_token() {
     char c = advance();
 
     if (c == '\n') {
+        Token t = make_token(TOKEN_NEWLINE);
         lexer.line++;
         lexer.at_line_start = 1;
-        return make_token(TOKEN_NEWLINE);
+        return t;
     }
 
-    if (isdigit(c)) return number_token();
+    if (isdigit((unsigned char)c)) return number_token();
     if (c == '$' && (peek() == '"' || peek() == '\'' || peek() == '#')) {
         return interpolated_string_token(advance());
     }
     if ((c == 'f' || c == 'F') && (peek() == '"' || peek() == '\'' || peek() == '#')) {
         return interpolated_string_token(advance());
     }
-    if (isalpha(c) || c == '_') return identifier_or_keyword_token();
+    if (isalpha((unsigned char)c) || c == '_') return identifier_or_keyword_token();
     if (c == '#' || c == '"' || c == '\'') return string_token(c);
 
     switch (c) {
@@ -471,6 +508,7 @@ Token lexer_next_token() {
         case '[': return make_token(TOKEN_LBRACKET);
         case ']': return make_token(TOKEN_RBRACKET);
         case ',': return make_token(TOKEN_COMMA);
+        case '.': return make_token(TOKEN_DOT);
         case '+': return make_token(TOKEN_PLUS);
         case '{': return make_token(TOKEN_LBRACE);
         case '}': return make_token(TOKEN_RBRACE);
@@ -486,8 +524,8 @@ Token lexer_next_token() {
             if (peek() == '=') { advance(); return make_token(TOKEN_GREATER_THAN_OR_EQUAL); }
             return make_token(TOKEN_GREATER_THAN);
         case '=':
-            if (peek() == '=') advance();
-            return make_token(TOKEN_EQUALS);
+            if (peek() == '=') { advance(); return make_token(TOKEN_EQUALS); }
+            return make_token(TOKEN_ASSIGN);
         case '!':
             if (peek() == '=') { advance(); return make_token(TOKEN_DOES_NOT_EQUAL); }
             return make_token(TOKEN_NOT);

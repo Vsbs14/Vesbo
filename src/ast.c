@@ -1,4 +1,5 @@
 #include "../include/ast.h"
+#include "../include/module.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -8,6 +9,22 @@ static char *copy_string(const char *s) {
     char *copy = malloc(len + 1);
     memcpy(copy, s, len + 1);
     return copy;
+}
+
+static char current_ast_file[4096] = "<script>";
+static int current_ast_line = 1;
+static int current_ast_col = 1;
+
+void ast_set_current_loc(const char *file, int line, int column) {
+    const char *f = file ? file : module_get_current_file();
+    if (f && f[0]) {
+        strncpy(current_ast_file, f, sizeof(current_ast_file) - 1);
+        current_ast_file[sizeof(current_ast_file) - 1] = '\0';
+    } else {
+        strcpy(current_ast_file, "<script>");
+    }
+    if (line > 0) current_ast_line = line;
+    if (column > 0) current_ast_col = column;
 }
 
 // --- List helpers ---
@@ -54,12 +71,27 @@ void string_list_add(StringList *list, const char *str) {
     list->items[list->count++] = copy_string(str);
 }
 
+void string_list_insert_first(StringList *list, const char *str) {
+    if (list->count >= list->capacity) {
+        list->capacity = list->capacity == 0 ? 8 : list->capacity * 2;
+        list->items = realloc(list->items, sizeof(char *) * list->capacity);
+    }
+    for (int i = list->count; i > 0; i--) {
+        list->items[i] = list->items[i - 1];
+    }
+    list->items[0] = copy_string(str);
+    list->count++;
+}
+
 // --- Expr constructors ---
 
 static Expr *alloc_expr(ExprType type, int line) {
     Expr *e = malloc(sizeof(Expr));
     e->type = type;
-    e->line = line;
+    e->line = line > 0 ? line : current_ast_line;
+    e->column = current_ast_col;
+    const char *f = module_get_current_file();
+    e->file = copy_string((f && f[0]) ? f : current_ast_file);
     return e;
 }
 
@@ -126,6 +158,27 @@ Expr *make_index_expr(Expr *collection, Expr *index, int line) {
     return e;
 }
 
+Expr *make_get_field_expr(Expr *object, const char *field_name, int line) {
+    Expr *e = alloc_expr(EXPR_GET_FIELD, line);
+    e->as.get_field.object = object;
+    e->as.get_field.field_name = copy_string(field_name);
+    return e;
+}
+
+Expr *make_method_call_expr(Expr *object, const char *method_name, ExprList args, int line) {
+    Expr *e = alloc_expr(EXPR_METHOD_CALL, line);
+    e->as.method_call.object = object;
+    e->as.method_call.method_name = copy_string(method_name);
+    e->as.method_call.args = args;
+    return e;
+}
+
+Expr *make_yield_expr(Expr *value, int line) {
+    Expr *e = alloc_expr(EXPR_YIELD, line);
+    e->as.yield_expr.value = value;
+    return e;
+}
+
 Expr *make_binary_expr(BinOp op, Expr *left, Expr *right, int line) {
     Expr *e = alloc_expr(EXPR_BINARY, line);
     e->as.binary.op = op;
@@ -153,7 +206,10 @@ Expr *make_call_expr(const char *callee_name, ExprList args, int line) {
 static Stmt *alloc_stmt(StmtType type, int line) {
     Stmt *s = malloc(sizeof(Stmt));
     s->type = type;
-    s->line = line;
+    s->line = line > 0 ? line : current_ast_line;
+    s->column = current_ast_col;
+    const char *f = module_get_current_file();
+    s->file = copy_string((f && f[0]) ? f : current_ast_file);
     return s;
 }
 
@@ -175,8 +231,41 @@ Stmt *make_assign_stmt(const char *name, Expr *value, int line) {
 Stmt *make_index_set_stmt(const char *name, Expr *index, Expr *value, int line) {
     Stmt *s = alloc_stmt(STMT_INDEX_SET, line);
     s->as.index_set.name = copy_string(name);
+    s->as.index_set.collection = NULL;
     s->as.index_set.index = index;
     s->as.index_set.value = value;
+    return s;
+}
+
+Stmt *make_index_set_target_stmt(Expr *collection, Expr *index, Expr *value, int line) {
+    Stmt *s = alloc_stmt(STMT_INDEX_SET, line);
+    if (collection && collection->type == EXPR_IDENT) {
+        s->as.index_set.name = copy_string(collection->as.ident_name);
+        s->as.index_set.collection = NULL;
+        free_expr(collection);
+    } else {
+        s->as.index_set.name = NULL;
+        s->as.index_set.collection = collection;
+    }
+    s->as.index_set.index = index;
+    s->as.index_set.value = value;
+    return s;
+}
+
+Stmt *make_set_field_stmt(Expr *object, const char *field_name, Expr *value, int line) {
+    Stmt *s = alloc_stmt(STMT_SET_FIELD, line);
+    s->as.set_field.object = object;
+    s->as.set_field.field_name = copy_string(field_name);
+    s->as.set_field.value = value;
+    return s;
+}
+
+Stmt *make_struct_decl_stmt(const char *name, StringList field_names, ExprList field_defaults, StmtList methods, int line) {
+    Stmt *s = alloc_stmt(STMT_STRUCT_DECL, line);
+    s->as.struct_decl.name = copy_string(name);
+    s->as.struct_decl.field_names = field_names;
+    s->as.struct_decl.field_defaults = field_defaults;
+    s->as.struct_decl.methods = methods;
     return s;
 }
 
@@ -260,6 +349,11 @@ Stmt *make_expr_stmt(Expr *expr, int line) {
     return s;
 }
 
+static void free_string_list(StringList *list) {
+    for (int i = 0; i < list->count; i++) free(list->items[i]);
+    free(list->items);
+}
+
 void free_expr(Expr *expr) {
     if (!expr) return;
     switch (expr->type) {
@@ -281,6 +375,20 @@ void free_expr(Expr *expr) {
             free_expr(expr->as.index_expr.collection);
             free_expr(expr->as.index_expr.index);
             break;
+        case EXPR_GET_FIELD:
+            free_expr(expr->as.get_field.object);
+            free(expr->as.get_field.field_name);
+            break;
+        case EXPR_METHOD_CALL:
+            free_expr(expr->as.method_call.object);
+            free(expr->as.method_call.method_name);
+            for (int i = 0; i < expr->as.method_call.args.count; i++)
+                free_expr(expr->as.method_call.args.items[i]);
+            free(expr->as.method_call.args.items);
+            break;
+        case EXPR_YIELD:
+            free_expr(expr->as.yield_expr.value);
+            break;
         case EXPR_BINARY:
             free_expr(expr->as.binary.left);
             free_expr(expr->as.binary.right);
@@ -297,16 +405,12 @@ void free_expr(Expr *expr) {
         case EXPR_NONE:
             break;
     }
+    free(expr->file);
     free(expr);
 }
 
 void free_stmt_list(StmtList *list) {
     for (int i = 0; i < list->count; i++) free_stmt(list->items[i]);
-    free(list->items);
-}
-
-static void free_string_list(StringList *list) {
-    for (int i = 0; i < list->count; i++) free(list->items[i]);
     free(list->items);
 }
 
@@ -323,8 +427,22 @@ void free_stmt(Stmt *stmt) {
             break;
         case STMT_INDEX_SET:
             free(stmt->as.index_set.name);
+            free_expr(stmt->as.index_set.collection);
             free_expr(stmt->as.index_set.index);
             free_expr(stmt->as.index_set.value);
+            break;
+        case STMT_SET_FIELD:
+            free_expr(stmt->as.set_field.object);
+            free(stmt->as.set_field.field_name);
+            free_expr(stmt->as.set_field.value);
+            break;
+        case STMT_STRUCT_DECL:
+            free(stmt->as.struct_decl.name);
+            free_string_list(&stmt->as.struct_decl.field_names);
+            for (int i = 0; i < stmt->as.struct_decl.field_defaults.count; i++)
+                free_expr(stmt->as.struct_decl.field_defaults.items[i]);
+            free(stmt->as.struct_decl.field_defaults.items);
+            free_stmt_list(&stmt->as.struct_decl.methods);
             break;
         case STMT_IMPORT:
             free(stmt->as.import_stmt.path);
@@ -367,5 +485,6 @@ void free_stmt(Stmt *stmt) {
             break;
         case STMT_EXPR: free_expr(stmt->as.expr_stmt.expr); break;
     }
+    free(stmt->file);
     free(stmt);
 }

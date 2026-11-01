@@ -8,6 +8,8 @@ typedef struct {
     int start;
     int current;
     int line;
+    int column;
+    int token_start_col;
     int at_line_start;
     int indent_stack[128];
     int indent_count;

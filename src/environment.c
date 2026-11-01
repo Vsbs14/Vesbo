@@ -48,9 +48,11 @@ void env_init(Environment *env) {
     env->count = 0;
     env->capacity = 0;
     env_push_scope(env); // scope 0: global
+    gc_register_env(env);
 }
 
 void env_free(Environment *env) {
+    gc_unregister_env(env);
     while (env->count > 0) {
         env->count--;
         scope_free(&env->scopes[env->count]);

@@ -1,6 +1,7 @@
 #include "../include/parser.h"
 #include "../include/lexer.h"
 #include "../include/token.h"
+#include "../include/module.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,6 +32,7 @@ void parser_set_state(ParserState state) {
 static void parser_advance(void) {
     previous_tok = current_tok;
     current_tok = lexer_next_token();
+    ast_set_current_loc(module_get_current_file(), previous_tok.line, previous_tok.column);
 }
 
 static int check(TokenType type) {
@@ -44,8 +46,14 @@ static int match(TokenType type) {
 }
 
 static void error_at(Token *tok, const char *message) {
-    fprintf(stderr, "Parse error at line %d (near '%s'): %s\n",
-            tok->line, tok->lexeme ? tok->lexeme : "?", message);
+    const char *file = module_get_current_file();
+    if (file && file[0]) {
+        fprintf(stderr, "Parse error at %s:%d:%d (near '%s'): %s\n",
+                file, tok->line, tok->column, tok->lexeme ? tok->lexeme : "?", message);
+    } else {
+        fprintf(stderr, "Parse error at line %d:%d (near '%s'): %s\n",
+                tok->line, tok->column, tok->lexeme ? tok->lexeme : "?", message);
+    }
     lexer_cleanup();
     if (repl_recovery_buf) {
         longjmp(*repl_recovery_buf, 1);
@@ -71,11 +79,38 @@ static Stmt *parse_statement(void);
 static Expr *parse_or(void);
 
 static Expr *parse_postfix(Expr *expr, int line) {
-    while (match(TOKEN_LBRACKET)) {
-        Expr *index = parse_expression();
-        consume(TOKEN_RBRACKET, "expected ']' after index");
-        expr = make_index_expr(expr, index, line);
+    for (;;) {
+        if (match(TOKEN_LBRACKET)) {
+            int idx_line = previous_tok.line;
+            int idx_col = previous_tok.column;
+            Expr *index = parse_expression();
+            consume(TOKEN_RBRACKET, "expected ']' after index");
+            ast_set_current_loc(module_get_current_file(), idx_line, idx_col);
+            expr = make_index_expr(expr, index, idx_line);
+        } else if (match(TOKEN_DOT)) {
+            int dot_line = previous_tok.line;
+            int dot_col = previous_tok.column;
+            Token member = consume(TOKEN_IDENT, "expected field or method name after '.'");
+            if (match(TOKEN_LPAREN)) {
+                ExprList args;
+                expr_list_init(&args);
+                if (!check(TOKEN_RPAREN)) {
+                    do {
+                        expr_list_add(&args, parse_expression());
+                    } while (match(TOKEN_COMMA));
+                }
+                consume(TOKEN_RPAREN, "expected ')' after method arguments");
+                ast_set_current_loc(module_get_current_file(), dot_line, dot_col);
+                expr = make_method_call_expr(expr, member.lexeme, args, dot_line);
+            } else {
+                ast_set_current_loc(module_get_current_file(), dot_line, dot_col);
+                expr = make_get_field_expr(expr, member.lexeme, dot_line);
+            }
+        } else {
+            break;
+        }
     }
+    (void)line;
     return expr;
 }
 
@@ -232,12 +267,14 @@ static Expr *parse_interpolated_string(const char *raw, int line) {
 
 static Expr *parse_primary(void) {
     int line = current_tok.line;
+    int col = current_tok.column;
+    ast_set_current_loc(module_get_current_file(), line, col);
 
     if (match(TOKEN_NUMBER)) {
         return make_number_expr(previous_tok.number_val, line);
     }
     if (match(TOKEN_STRING)) {
-        return make_string_expr(previous_tok.lexeme, line);
+        return parse_postfix(make_string_expr(previous_tok.lexeme, line), line);
     }
     if (match(TOKEN_INTERPOLATED_STRING)) {
         return parse_postfix(parse_interpolated_string(previous_tok.lexeme, line), line);
@@ -250,6 +287,22 @@ static Expr *parse_primary(void) {
     }
     if (match(TOKEN_NONE)) {
         return make_none_expr(line);
+    }
+    if (match(TOKEN_YIELD)) {
+        if (check(TOKEN_NEWLINE) || check(TOKEN_DEDENT) || check(TOKEN_EOF) ||
+            check(TOKEN_RPAREN) || check(TOKEN_RBRACKET) || check(TOKEN_RBRACE) || check(TOKEN_COMMA)) {
+            return make_yield_expr(NULL, line);
+        }
+        if (match(TOKEN_LPAREN)) {
+            if (match(TOKEN_RPAREN)) {
+                return make_yield_expr(NULL, line);
+            }
+            Expr *val = parse_expression();
+            consume(TOKEN_RPAREN, "expected ')' after yield argument");
+            return make_yield_expr(val, line);
+        }
+        Expr *val = parse_expression();
+        return make_yield_expr(val, line);
     }
     if (match(TOKEN_LPAREN)) {
         Expr *e = parse_expression();
@@ -265,6 +318,7 @@ static Expr *parse_primary(void) {
             } while (match(TOKEN_COMMA));
         }
         consume(TOKEN_RBRACKET, "expected ']' after array elements");
+        ast_set_current_loc(module_get_current_file(), line, col);
         return parse_postfix(make_array_expr(elements, line), line);
     }
     if (match(TOKEN_LBRACE)) {
@@ -279,6 +333,7 @@ static Expr *parse_primary(void) {
             } while (match(TOKEN_COMMA));
         }
         consume(TOKEN_RBRACE, "expected '}' after map entries");
+        ast_set_current_loc(module_get_current_file(), line, col);
         return parse_postfix(make_map_expr(entries, line), line);
     }
     if (match(TOKEN_IDENT)) {
@@ -297,8 +352,10 @@ static Expr *parse_primary(void) {
                 } while (match(TOKEN_COMMA));
             }
             consume(TOKEN_RPAREN, "expected ')' after arguments");
+            ast_set_current_loc(module_get_current_file(), line, col);
             expr = make_call_expr(name, args, line);
         } else {
+            ast_set_current_loc(module_get_current_file(), line, col);
             expr = make_ident_expr(name, line);
         }
 
@@ -306,17 +363,20 @@ static Expr *parse_primary(void) {
     }
 
     error_at(&current_tok, "expected an expression");
-    return NULL; // unreachable
+    return NULL;
 }
 
 static Expr *parse_unary(void) {
     int line = current_tok.line;
+    int col = current_tok.column;
     if (match(TOKEN_NOT)) {
         Expr *operand = parse_unary();
+        ast_set_current_loc(module_get_current_file(), line, col);
         return make_unary_expr(UN_NOT, operand, line);
     }
     if (match(TOKEN_MINUS)) {
         Expr *operand = parse_unary();
+        ast_set_current_loc(module_get_current_file(), line, col);
         return make_unary_expr(UN_NEGATE, operand, line);
     }
     return parse_primary();
@@ -326,14 +386,18 @@ static Expr *parse_multiplicative(void) {
     Expr *left = parse_unary();
     for (;;) {
         int line = current_tok.line;
+        int col = current_tok.column;
         if (match(TOKEN_STAR)) {
             Expr *right = parse_unary();
+            ast_set_current_loc(module_get_current_file(), line, col);
             left = make_binary_expr(BIN_MUL, left, right, line);
         } else if (match(TOKEN_SLASH)) {
             Expr *right = parse_unary();
+            ast_set_current_loc(module_get_current_file(), line, col);
             left = make_binary_expr(BIN_DIV, left, right, line);
         } else if (match(TOKEN_PERCENT)) {
             Expr *right = parse_unary();
+            ast_set_current_loc(module_get_current_file(), line, col);
             left = make_binary_expr(BIN_MOD, left, right, line);
         } else {
             break;
@@ -346,11 +410,14 @@ static Expr *parse_additive(void) {
     Expr *left = parse_multiplicative();
     for (;;) {
         int line = current_tok.line;
+        int col = current_tok.column;
         if (match(TOKEN_PLUS)) {
             Expr *right = parse_multiplicative();
+            ast_set_current_loc(module_get_current_file(), line, col);
             left = make_binary_expr(BIN_ADD, left, right, line);
         } else if (match(TOKEN_MINUS)) {
             Expr *right = parse_multiplicative();
+            ast_set_current_loc(module_get_current_file(), line, col);
             left = make_binary_expr(BIN_SUB, left, right, line);
         } else {
             break;
@@ -363,14 +430,23 @@ static Expr *parse_comparison(void) {
     Expr *left = parse_additive();
     for (;;) {
         int line = current_tok.line;
+        int col = current_tok.column;
         if (match(TOKEN_LESS_THAN)) {
-            left = make_binary_expr(BIN_LESS, left, parse_additive(), line);
+            Expr *r = parse_additive();
+            ast_set_current_loc(module_get_current_file(), line, col);
+            left = make_binary_expr(BIN_LESS, left, r, line);
         } else if (match(TOKEN_GREATER_THAN)) {
-            left = make_binary_expr(BIN_GREATER, left, parse_additive(), line);
+            Expr *r = parse_additive();
+            ast_set_current_loc(module_get_current_file(), line, col);
+            left = make_binary_expr(BIN_GREATER, left, r, line);
         } else if (match(TOKEN_LESS_THAN_OR_EQUAL)) {
-            left = make_binary_expr(BIN_LESS_EQUAL, left, parse_additive(), line);
+            Expr *r = parse_additive();
+            ast_set_current_loc(module_get_current_file(), line, col);
+            left = make_binary_expr(BIN_LESS_EQUAL, left, r, line);
         } else if (match(TOKEN_GREATER_THAN_OR_EQUAL)) {
-            left = make_binary_expr(BIN_GREATER_EQUAL, left, parse_additive(), line);
+            Expr *r = parse_additive();
+            ast_set_current_loc(module_get_current_file(), line, col);
+            left = make_binary_expr(BIN_GREATER_EQUAL, left, r, line);
         } else {
             break;
         }
@@ -382,10 +458,15 @@ static Expr *parse_equality(void) {
     Expr *left = parse_comparison();
     for (;;) {
         int line = current_tok.line;
+        int col = current_tok.column;
         if (match(TOKEN_EQUALS)) {
-            left = make_binary_expr(BIN_EQUALS, left, parse_comparison(), line);
+            Expr *r = parse_comparison();
+            ast_set_current_loc(module_get_current_file(), line, col);
+            left = make_binary_expr(BIN_EQUALS, left, r, line);
         } else if (match(TOKEN_DOES_NOT_EQUAL)) {
-            left = make_binary_expr(BIN_NOT_EQUALS, left, parse_comparison(), line);
+            Expr *r = parse_comparison();
+            ast_set_current_loc(module_get_current_file(), line, col);
+            left = make_binary_expr(BIN_NOT_EQUALS, left, r, line);
         } else {
             break;
         }
@@ -397,7 +478,9 @@ static Expr *parse_and(void) {
     Expr *left = parse_equality();
     while (match(TOKEN_AND)) {
         int line = previous_tok.line;
+        int col = previous_tok.column;
         Expr *right = parse_equality();
+        ast_set_current_loc(module_get_current_file(), line, col);
         left = make_binary_expr(BIN_AND, left, right, line);
     }
     return left;
@@ -407,7 +490,9 @@ static Expr *parse_or(void) {
     Expr *left = parse_and();
     while (match(TOKEN_OR)) {
         int line = previous_tok.line;
+        int col = previous_tok.column;
         Expr *right = parse_and();
+        ast_set_current_loc(module_get_current_file(), line, col);
         left = make_binary_expr(BIN_OR, left, right, line);
     }
     return left;
@@ -432,31 +517,56 @@ static StmtList parse_block(void) {
 
 static Stmt *parse_var_decl(int is_global) {
     int line = current_tok.line;
+    int col = current_tok.column;
     consume(TOKEN_VAR, "expected 'var'");
     Token name_tok = consume(TOKEN_IDENT, "expected variable name");
-    consume(TOKEN_IS, "expected 'is' after variable name");
+    if (!match(TOKEN_IS) && !match(TOKEN_ASSIGN)) {
+        error_at(&current_tok, "expected 'is' or '=' after variable name");
+    }
     Expr *value = parse_expression();
+    ast_set_current_loc(module_get_current_file(), line, col);
     return make_var_decl_stmt(name_tok.lexeme, value, is_global, line);
+}
+
+static Stmt *target_expr_to_assign_stmt(Expr *target, Expr *value, int line, int col) {
+    ast_set_current_loc(module_get_current_file(), line, col);
+    if (target->type == EXPR_IDENT) {
+        Stmt *s = make_assign_stmt(target->as.ident_name, value, line);
+        free_expr(target);
+        return s;
+    } else if (target->type == EXPR_GET_FIELD) {
+        Expr *obj = target->as.get_field.object;
+        Stmt *s = make_set_field_stmt(obj, target->as.get_field.field_name, value, line);
+        target->as.get_field.object = NULL;
+        free_expr(target);
+        return s;
+    } else if (target->type == EXPR_INDEX) {
+        Expr *coll = target->as.index_expr.collection;
+        Expr *idx = target->as.index_expr.index;
+        target->as.index_expr.collection = NULL;
+        target->as.index_expr.index = NULL;
+        free_expr(target);
+        return make_index_set_target_stmt(coll, idx, value, line);
+    }
+    error_at(&current_tok, "invalid assignment target");
+    return NULL;
 }
 
 static Stmt *parse_set(void) {
     int line = current_tok.line;
+    int col = current_tok.column;
     consume(TOKEN_SET, "expected 'set'");
-    Token name_tok = consume(TOKEN_IDENT, "expected variable name");
-    if (match(TOKEN_LBRACKET)) {
-        Expr *index = parse_expression();
-        consume(TOKEN_RBRACKET, "expected ']' after index");
-        consume(TOKEN_TO, "expected 'to' after index in 'set' statement");
-        Expr *value = parse_expression();
-        return make_index_set_stmt(name_tok.lexeme, index, value, line);
+    Expr *target = parse_primary();
+    if (!match(TOKEN_TO) && !match(TOKEN_ASSIGN)) {
+        error_at(&current_tok, "expected 'to' after target in 'set' statement");
     }
-    consume(TOKEN_TO, "expected 'to' after variable name in 'set' statement");
     Expr *value = parse_expression();
-    return make_assign_stmt(name_tok.lexeme, value, line);
+    return target_expr_to_assign_stmt(target, value, line, col);
 }
 
 static Stmt *parse_if(void) {
     int line = current_tok.line;
+    int col = current_tok.column;
     consume(TOKEN_IF, "expected 'if'");
     Expr *condition = parse_expression();
     StmtList then_branch = parse_block();
@@ -475,22 +585,26 @@ static Stmt *parse_if(void) {
         }
     }
 
+    ast_set_current_loc(module_get_current_file(), line, col);
     return make_if_stmt(condition, then_branch, else_branch, has_else, line);
 }
 
 static Stmt *parse_loop(void) {
     int line = current_tok.line;
+    int col = current_tok.column;
     consume(TOKEN_LOOP, "expected 'loop'");
 
     if (match(TOKEN_TILL)) {
         Expr *condition = parse_expression();
         StmtList body = parse_block();
+        ast_set_current_loc(module_get_current_file(), line, col);
         return make_loop_till_stmt(condition, body, line);
     }
 
     if (match(TOKEN_WHILE)) {
         Expr *condition = parse_expression();
         StmtList body = parse_block();
+        ast_set_current_loc(module_get_current_file(), line, col);
         return make_loop_while_stmt(condition, body, line);
     }
 
@@ -501,6 +615,7 @@ static Stmt *parse_loop(void) {
         consume(TOKEN_AS, "expected 'as' in 'loop from X to Y as name'");
         Token var_tok = consume(TOKEN_IDENT, "expected loop variable name after 'as'");
         StmtList body = parse_block();
+        ast_set_current_loc(module_get_current_file(), line, col);
         return make_loop_range_stmt(from, to, var_tok.lexeme, body, line);
     }
 
@@ -509,15 +624,17 @@ static Stmt *parse_loop(void) {
         consume(TOKEN_AS, "expected 'as' in 'loop through X as name'");
         Token item_tok = consume(TOKEN_IDENT, "expected item name after 'as'");
         StmtList body = parse_block();
+        ast_set_current_loc(module_get_current_file(), line, col);
         return make_loop_through_stmt(collection, item_tok.lexeme, body, line);
     }
 
     error_at(&current_tok, "expected 'while', 'till', 'from', or 'through' after 'loop'");
-    return NULL; // unreachable
+    return NULL;
 }
 
 static Stmt *parse_func_decl(void) {
     int line = current_tok.line;
+    int col = current_tok.column;
     consume(TOKEN_FT, "expected 'fnc' or 'ft'");
     Token name_tok = consume(TOKEN_IDENT, "expected function name");
     consume(TOKEN_LPAREN, "expected '(' after function name");
@@ -537,38 +654,120 @@ static Stmt *parse_func_decl(void) {
     }
 
     StmtList body = parse_block();
+    ast_set_current_loc(module_get_current_file(), line, col);
     return make_func_decl_stmt(name_tok.lexeme, params, body, line);
+}
+
+static Stmt *parse_struct_decl(void) {
+    int line = current_tok.line;
+    int col = current_tok.column;
+    consume(TOKEN_STRUCT, "expected 'struct'");
+    Token name_tok = consume(TOKEN_IDENT, "expected struct name");
+
+    StringList field_names;
+    string_list_init(&field_names);
+    ExprList field_defaults;
+    expr_list_init(&field_defaults);
+    StmtList methods;
+    stmt_list_init(&methods);
+
+    /* Optional inline field list: struct Vec2(x, y) */
+    if (match(TOKEN_LPAREN)) {
+        if (!check(TOKEN_RPAREN)) {
+            do {
+                Token f = consume(TOKEN_IDENT, "expected field name");
+                string_list_add(&field_names, f.lexeme);
+                if (match(TOKEN_IS) || match(TOKEN_ASSIGN)) {
+                    expr_list_add(&field_defaults, parse_expression());
+                } else {
+                    expr_list_add(&field_defaults, make_none_expr(f.line));
+                }
+            } while (match(TOKEN_COMMA));
+        }
+        consume(TOKEN_RPAREN, "expected ')' after struct fields");
+    }
+
+    /* Check if an indented body follows */
+    if (check(TOKEN_NEWLINE)) {
+        consume(TOKEN_NEWLINE, "expected newline after struct header");
+        if (match(TOKEN_INDENT)) {
+            while (!check(TOKEN_DEDENT) && !check(TOKEN_EOF)) {
+                if (match(TOKEN_NEWLINE)) continue;
+
+                if (check(TOKEN_FT)) {
+                    Stmt *method = parse_func_decl();
+                    if (method->as.func_decl.params.count == 0 ||
+                        strcmp(method->as.func_decl.params.items[0], "self") != 0) {
+                        string_list_insert_first(&method->as.func_decl.params, "self");
+                    }
+                    stmt_list_add(&methods, method);
+                } else if (match(TOKEN_VAR)) {
+                    Token f = consume(TOKEN_IDENT, "expected field name");
+                    string_list_add(&field_names, f.lexeme);
+                    if (match(TOKEN_IS) || match(TOKEN_ASSIGN)) {
+                        expr_list_add(&field_defaults, parse_expression());
+                    } else {
+                        expr_list_add(&field_defaults, make_none_expr(f.line));
+                    }
+                } else if (check(TOKEN_IDENT)) {
+                    do {
+                        Token f = consume(TOKEN_IDENT, "expected field name");
+                        string_list_add(&field_names, f.lexeme);
+                        if (match(TOKEN_IS) || match(TOKEN_ASSIGN) || match(TOKEN_COLON)) {
+                            expr_list_add(&field_defaults, parse_expression());
+                        } else {
+                            expr_list_add(&field_defaults, make_none_expr(f.line));
+                        }
+                    } while (match(TOKEN_COMMA));
+                } else {
+                    error_at(&current_tok, "expected field or method ('fnc') inside struct");
+                }
+            }
+            consume(TOKEN_DEDENT, "expected struct indentation to end");
+        }
+    }
+
+    ast_set_current_loc(module_get_current_file(), line, col);
+    return make_struct_decl_stmt(name_tok.lexeme, field_names, field_defaults, methods, line);
 }
 
 static Stmt *parse_return(void) {
     int line = current_tok.line;
+    int col = current_tok.column;
     consume(TOKEN_RETURN, "expected 'return'");
-    if (check(TOKEN_NEWLINE) || check(TOKEN_DEDENT)) {
+    if (check(TOKEN_NEWLINE) || check(TOKEN_DEDENT) || check(TOKEN_EOF)) {
+        ast_set_current_loc(module_get_current_file(), line, col);
         return make_return_stmt(NULL, line);
     }
     Expr *value = parse_expression();
+    ast_set_current_loc(module_get_current_file(), line, col);
     return make_return_stmt(value, line);
 }
 
 static Stmt *parse_output(void) {
     int line = current_tok.line;
+    int col = current_tok.column;
     consume(TOKEN_OUTPUT, "expected 'output'");
     Expr *value = parse_expression();
+    ast_set_current_loc(module_get_current_file(), line, col);
     return make_output_stmt(value, line);
 }
 
 static Stmt *parse_try_catch(void) {
     int line = current_tok.line;
+    int col = current_tok.column;
     consume(TOKEN_TRY, "expected 'try'");
     StmtList try_body = parse_block();
     consume(TOKEN_CATCH, "expected 'catch' after try block");
     Token error_tok = consume(TOKEN_IDENT, "expected error variable name after 'catch'");
     StmtList catch_body = parse_block();
+    ast_set_current_loc(module_get_current_file(), line, col);
     return make_try_catch_stmt(try_body, error_tok.lexeme, catch_body, line);
 }
 
 static Stmt *parse_import(void) {
     int line = current_tok.line;
+    int col = current_tok.column;
     consume(TOKEN_IMPORT, "expected 'import'");
     char *path = NULL;
     if (check(TOKEN_STRING)) {
@@ -585,6 +784,7 @@ static Stmt *parse_import(void) {
         error_at(&current_tok, "expected module name or file path after 'import'");
         return NULL;
     }
+    ast_set_current_loc(module_get_current_file(), line, col);
     return make_import_stmt(path, line);
 }
 
@@ -595,20 +795,27 @@ static Stmt *parse_statement(void) {
     if (check(TOKEN_IF)) return parse_if();
     if (check(TOKEN_LOOP)) return parse_loop();
     if (check(TOKEN_FT)) return parse_func_decl();
+    if (check(TOKEN_STRUCT)) return parse_struct_decl();
     if (check(TOKEN_RETURN)) return parse_return();
     if (check(TOKEN_OUTPUT)) return parse_output();
     if (check(TOKEN_TRY)) return parse_try_catch();
 
     if (check(TOKEN_IDENT) && strcmp(current_tok.lexeme, "global") == 0) {
-        int line = current_tok.line;
         parser_advance();
-        Stmt *decl = parse_var_decl(1);
-        (void)line;
-        return decl;
+        return parse_var_decl(1);
     }
 
     int line = current_tok.line;
+    int col = current_tok.column;
     Expr *expr = parse_expression();
+
+    /* Support direct '=' assignment: e.g. camera.position.x = 10 or x = 5 or arr[0] = 1 */
+    if (match(TOKEN_ASSIGN)) {
+        Expr *val = parse_expression();
+        return target_expr_to_assign_stmt(expr, val, line, col);
+    }
+
+    ast_set_current_loc(module_get_current_file(), line, col);
     return make_expr_stmt(expr, line);
 }
 
@@ -616,6 +823,7 @@ static Stmt *parse_statement(void) {
 
 StmtList parse_program(void) {
     current_tok = lexer_next_token();
+    ast_set_current_loc(module_get_current_file(), current_tok.line, current_tok.column);
 
     StmtList program;
     stmt_list_init(&program);

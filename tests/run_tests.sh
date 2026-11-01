@@ -28,7 +28,7 @@ failed() {
 }
 
 # Ensure binary is built
-if [ ! -x "$ROOT/vesbo" ]; then
+if [ ! -x "$ROOT/vesbo" ] && [ ! -x "$ROOT/vesbo.exe" ]; then
     make -C "$ROOT" || failed
 fi
 
@@ -224,6 +224,79 @@ set_test "Test 26: Calculator example bytecode VM"
 printf "add\n10\n5\nquit\n" | ./vesbo "$VBO_FILE" > "$OUTPUT" 2>&1 || failed
 grep -Fxq "15" "$OUTPUT" || failed
 rm -f "$VBO_FILE"
+
+# Test 27: Advanced features in interpreter and bytecode VM
+set_test "Test 27: Advanced features interpreter"
+./vesbo tests/advanced_features_test.vsb > "$OUTPUT" 2>&1 || failed
+grep -Fxq "arr_ref:99:7" "$OUTPUT" || failed
+grep -Fxq "map_ref:250:10" "$OUTPUT" || failed
+grep -Fxq "struct_ref:30:3" "$OUTPUT" || failed
+grep -Fxq "gc_ran:true" "$OUTPUT" || failed
+grep -Fxq "globals:15:40" "$OUTPUT" || failed
+grep -Fxq "map_sum:89700" "$OUTPUT" || failed
+grep -Fxq "deep_stack:350" "$OUTPUT" || failed
+grep -Fxq "dot_assign:10:20" "$OUTPUT" || failed
+grep -Fxq "method_pan:32:514" "$OUTPUT" || failed
+grep -Fxq "defaults:3:2:5:61" "$OUTPUT" || failed
+grep -Fxq "status_init:suspended:true" "$OUTPUT" || failed
+grep -Fxq "coro_vals:30:150:27" "$OUTPUT" || failed
+grep -Fxq "status_done:dead:false" "$OUTPUT" || failed
+grep -Fxq "nested_coro:30:50" "$OUTPUT" || failed
+grep -Fxq "coro_struct:25:100" "$OUTPUT" || failed
+grep -Fxq "nested_catch:110:dead" "$OUTPUT" || failed
+grep -Fxq "bad_start_status:dead" "$OUTPUT" || failed
+grep -Fxq "trace:true:true:true" "$OUTPUT" || failed
+grep -Fxq "profile:true" "$OUTPUT" || failed
+grep -Fxq "ADVANCED_FEATURES_PASS" "$OUTPUT" || failed
+
+set_test "Test 27: Advanced features bytecode VM"
+./vesbo -c tests/advanced_features_test.vsb -o "$VBO_FILE" > /dev/null 2>&1 || failed
+./vesbo "$VBO_FILE" > "$OUTPUT" 2>&1 || failed
+grep -Fxq "arr_ref:99:7" "$OUTPUT" || failed
+grep -Fxq "map_ref:250:10" "$OUTPUT" || failed
+grep -Fxq "struct_ref:30:3" "$OUTPUT" || failed
+grep -Fxq "gc_ran:true" "$OUTPUT" || failed
+grep -Fxq "globals:15:40" "$OUTPUT" || failed
+grep -Fxq "map_sum:89700" "$OUTPUT" || failed
+grep -Fxq "deep_stack:350" "$OUTPUT" || failed
+grep -Fxq "dot_assign:10:20" "$OUTPUT" || failed
+grep -Fxq "method_pan:32:514" "$OUTPUT" || failed
+grep -Fxq "defaults:3:2:5:61" "$OUTPUT" || failed
+grep -Fxq "status_init:suspended:true" "$OUTPUT" || failed
+grep -Fxq "coro_vals:30:150:27" "$OUTPUT" || failed
+grep -Fxq "status_done:dead:false" "$OUTPUT" || failed
+grep -Fxq "nested_coro:30:50" "$OUTPUT" || failed
+grep -Fxq "coro_struct:25:100" "$OUTPUT" || failed
+grep -Fxq "nested_catch:110:dead" "$OUTPUT" || failed
+grep -Fxq "bad_start_status:dead" "$OUTPUT" || failed
+grep -Fxq "trace:true:true:true" "$OUTPUT" || failed
+grep -Fxq "profile:true" "$OUTPUT" || failed
+grep -Fxq "ADVANCED_FEATURES_PASS" "$OUTPUT" || failed
+rm -f "$VBO_FILE"
+
+set_test "Test 28: Advanced features --gc-stress and --profile"
+./vesbo --gc-stress --profile --vm tests/advanced_features_test.vsb > "$OUTPUT" 2>&1 || failed
+grep -Fxq "ADVANCED_FEATURES_PASS" "$OUTPUT" || failed
+grep -Fq "[Profile] Instructions:" "$OUTPUT" || failed
+
+./vesbo --gc-stress tests/advanced_features_test.vsb > "$OUTPUT" 2>&1 || failed
+grep -Fxq "ADVANCED_FEATURES_PASS" "$OUTPUT" || failed
+
+set_test "Test 29: C Embedding API"
+if [ -x "./tests/embed_host_test" ]; then
+    ./tests/embed_host_test tests/embed_script.vsb > "$OUTPUT" 2>&1 || failed
+elif [ -x "./tests/embed_host_test.exe" ]; then
+    ./tests/embed_host_test.exe tests/embed_script.vsb > "$OUTPUT" 2>&1 || failed
+else
+    make -C "$ROOT" || failed
+    ./tests/embed_host_test tests/embed_script.vsb > "$OUTPUT" 2>&1 || failed
+fi
+grep -Fxq "tick1 status=1 val=16" "$OUTPUT" || failed
+grep -Fxq "tick2 status=1 val=35" "$OUTPUT" || failed
+grep -Fxq "tick3 status=0 val=1035" "$OUTPUT" || failed
+grep -Fxq "host_ticks=102" "$OUTPUT" || failed
+grep -Fxq "EMBED_HOST_PASS" "$OUTPUT" || failed
+
 
 echo "All Vesbo smoke tests passed."
 exit 0

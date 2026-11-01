@@ -21,18 +21,16 @@
 *.a
 *.la
 *.lo
-!vendor/raylib/lib/*.lib
 
 # Shared objects (inc. Windows DLLs)
 *.dll
 *.so
 *.so.*
 *.dylib
-!vendor/raylib/lib/*.dll
-!raylib.dll
 
 # Executables
 /vesbo
+/tests/embed_host_test
 *.exe
 *.vbo
 *.out
