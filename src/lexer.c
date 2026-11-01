@@ -407,9 +407,9 @@ static Token identifier_or_keyword_token() {
     if (len == 5 && strncmp(text, "false", 5) == 0) return make_token(TOKEN_FALSE);
     if (len == 4 && strncmp(text, "none", 4) == 0) return make_token(TOKEN_NONE);
     if (len == 6 && strncmp(text, "equals", 6) == 0) return make_token(TOKEN_EQUALS);
-    if (len == 3 && strncmp(text, "AND", 3) == 0) return make_token(TOKEN_AND);
-    if (len == 2 && strncmp(text, "OR", 2) == 0) return make_token(TOKEN_OR);
-    if (len == 3 && strncmp(text, "NOT", 3) == 0) return make_token(TOKEN_NOT);
+    if (len == 3 && (strncmp(text, "AND", 3) == 0 || strncmp(text, "and", 3) == 0)) return make_token(TOKEN_AND);
+    if (len == 2 && (strncmp(text, "OR", 2) == 0 || strncmp(text, "or", 2) == 0)) return make_token(TOKEN_OR);
+    if (len == 3 && (strncmp(text, "NOT", 3) == 0 || strncmp(text, "not", 3) == 0)) return make_token(TOKEN_NOT);
 
     return make_token(TOKEN_IDENT);
 }

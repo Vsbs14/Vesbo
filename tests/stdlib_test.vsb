@@ -1,0 +1,35 @@
+import "std/math"
+import "std/strings"
+import "std/lists"
+
+fnc main()
+    -- Math tests
+    output $"abs(-42) = {abs(-42)}"
+    output $"min(10, 20) = {min(10, 20)}, max(10, 20) = {max(10, 20)}"
+    output $"clamp(150, 0, 100) = {clamp(150, 0, 100)}"
+    output $"pow(2, 8) = {pow(2, 8)}"
+    output $"factorial(5) = {factorial(5)}"
+    output $"gcd(54, 24) = {gcd(54, 24)}, lcm(4, 6) = {lcm(4, 6)}"
+    output $"is_even(10) = {is_even(10)}, is_odd(10) = {is_odd(10)}"
+
+    -- Strings tests
+    output $"starts_with: {starts_with("vesbo-lang", "vesbo")}"
+    output $"ends_with: {ends_with("program.vsb", ".vsb")}"
+    output $"repeat: {repeat("abc", 3)}"
+    output $"pad_left: {pad_left("7", 3, "0")}"
+    output $"join: {join(["red", "green", "blue"], " - ")}"
+    var parts is split("apple,banana,cherry", ",")
+    output $"split count: {length(parts)}, second: {parts[1]}"
+
+    -- Lists tests
+    var numbers is [5, 10, 15, 20]
+    output $"sum: {sum(numbers)}, avg: {average(numbers)}"
+    output $"min: {min_item(numbers)}, max: {max_item(numbers)}"
+    var rev is reverse(numbers)
+    output $"reversed: {join(rev, ", ")}"
+    var sl is slice(numbers, 1, 3)
+    output $"sliced: {join(sl, ", ")}"
+    output $"index_of 15: {index_of(numbers, 15)}"
+    output $"count of 10: {count_occurrences(numbers, 10)}"
+
+    output "stdlib test success"
