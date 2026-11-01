@@ -96,6 +96,32 @@ findstr /x /c:"Hello Vesbo I/O! Extra content." "%OUTPUT%" >nul || goto :failed
 findstr /x /c:"none" "%OUTPUT%" >nul || goto :failed
 del "%OUTPUT%.vbo" >nul 2>nul
 
+REM Test Modules and imports in interpreter
+"%ROOT%\vesbo.exe" "%~dp0import_test.vsb" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"import test success" "%OUTPUT%" >nul || goto :failed
+
+REM Test Modules and imports in bytecode VM
+"%ROOT%\vesbo.exe" -c "%~dp0import_test.vsb" -o "%OUTPUT%.vbo" >nul 2>&1
+if errorlevel 1 goto :failed
+"%ROOT%\vesbo.exe" "%OUTPUT%.vbo" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"import test success" "%OUTPUT%" >nul || goto :failed
+del "%OUTPUT%.vbo" >nul 2>nul
+
+REM Test Circular imports in interpreter
+"%ROOT%\vesbo.exe" "%~dp0circ_test.vsb" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"circular import success" "%OUTPUT%" >nul || goto :failed
+
+REM Test Circular imports in bytecode VM
+"%ROOT%\vesbo.exe" -c "%~dp0circ_test.vsb" -o "%OUTPUT%.vbo" >nul 2>&1
+if errorlevel 1 goto :failed
+"%ROOT%\vesbo.exe" "%OUTPUT%.vbo" > "%OUTPUT%" 2>&1
+if errorlevel 1 goto :failed
+findstr /x /c:"circular import success" "%OUTPUT%" >nul || goto :failed
+del "%OUTPUT%.vbo" >nul 2>nul
+
 REM Test disassembler on .vsb source
 "%ROOT%\vesbo.exe" -d "%ROOT%\examples\array_loops.vsb" > "%OUTPUT%" 2>&1
 if errorlevel 1 goto :failed

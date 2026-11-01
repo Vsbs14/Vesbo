@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include "../include/codegen.h"
 #include "../include/builtins.h"
+#include "../include/module.h"
 
 typedef struct {
     char **names;
@@ -74,6 +75,7 @@ static void local_vars_pop(CodeGen *gen) {
 /* Forward declarations */
 static void codegen_stmt(CodeGen *gen, Stmt *stmt);
 static void codegen_expr(CodeGen *gen, Expr *expr);
+static void codegen_import(CodeGen *gen, const char *raw_path);
 
 static void codegen_stmt_list(CodeGen *gen, StmtList *stmts) {
     for (int i = 0; i < stmts->count; i++) {
@@ -226,6 +228,49 @@ static void codegen_expr(CodeGen *gen, Expr *expr) {
     }
 }
 
+static void codegen_import(CodeGen *gen, const char *raw_path) {
+    char *resolved = module_resolve_path(raw_path, module_get_current_file());
+    if (!resolved) {
+        fprintf(stderr, "Error: cannot find module '%s'\n", raw_path);
+        return;
+    }
+
+    if (module_is_imported(resolved)) {
+        free(resolved);
+        return;
+    }
+    module_mark_imported(resolved);
+
+    StmtList mod_stmts;
+    char *err = NULL;
+    const char *prev_file = module_get_current_file();
+    module_set_current_file(resolved);
+
+    if (!module_parse_file(resolved, &mod_stmts, &err)) {
+        module_set_current_file(prev_file);
+        fprintf(stderr, "Error importing '%s': %s\n", raw_path, err ? err : "parse error");
+        if (err) free(err);
+        free(resolved);
+        return;
+    }
+
+    /* Compile module statements */
+    for (int i = 0; i < mod_stmts.count; i++) {
+        if (mod_stmts.items[i]->type == STMT_FUNC_DECL) {
+            /* Skip 'main' from imported modules so library main does not override application entry point */
+            if (strcmp(mod_stmts.items[i]->as.func_decl.name, "main") != 0) {
+                codegen_stmt(gen, mod_stmts.items[i]);
+            }
+        } else {
+            codegen_stmt(gen, mod_stmts.items[i]);
+        }
+    }
+
+    module_set_current_file(prev_file);
+    free_stmt_list(&mod_stmts);
+    free(resolved);
+}
+
 static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
     if (!stmt) return;
 
@@ -272,6 +317,10 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
             chunk_write_op(gen->chunk, OP_INDEX_SET);
             break;
         }
+
+        case STMT_IMPORT:
+            codegen_import(gen, stmt->as.import_stmt.path);
+            break;
 
         case STMT_IF: {
             codegen_expr(gen, stmt->as.if_stmt.condition);
@@ -605,19 +654,50 @@ void codegen_free(CodeGen *gen) {
     free(gen);
 }
 
-Chunk *codegen_compile(CodeGen *gen, Stmt **statements, int count) {
-    local_vars_clear(&gen->locals);
-
-    /* Pre-pass: register all function declarations so forward references and recursion work */
+static void codegen_prepass_imports_and_funcs(CodeGen *gen, Stmt **statements, int count, int is_imported_scope) {
     for (int i = 0; i < count; i++) {
         if (statements[i]->type == STMT_FUNC_DECL) {
+            if (is_imported_scope && strcmp(statements[i]->as.func_decl.name, "main") == 0) {
+                continue;
+            }
             int existing = chunk_find_function(gen->chunk, statements[i]->as.func_decl.name);
             if (existing < 0) {
                 chunk_add_function(gen->chunk, statements[i]->as.func_decl.name, 0,
                                    statements[i]->as.func_decl.params.count);
             }
+        } else if (statements[i]->type == STMT_IMPORT) {
+            char *resolved = module_resolve_path(statements[i]->as.import_stmt.path, module_get_current_file());
+            if (!resolved) continue;
+            if (module_is_imported(resolved)) {
+                free(resolved);
+                continue;
+            }
+            module_mark_imported(resolved);
+            StmtList mod_stmts;
+            char *err = NULL;
+            const char *prev_file = module_get_current_file();
+            module_set_current_file(resolved);
+            if (module_parse_file(resolved, &mod_stmts, &err)) {
+                codegen_prepass_imports_and_funcs(gen, mod_stmts.items, mod_stmts.count, 1);
+                free_stmt_list(&mod_stmts);
+            } else {
+                if (err) free(err);
+            }
+            module_set_current_file(prev_file);
+            free(resolved);
         }
     }
+}
+
+Chunk *codegen_compile(CodeGen *gen, Stmt **statements, int count) {
+    local_vars_clear(&gen->locals);
+
+    /* Pre-pass: register all function declarations across this file and imported modules */
+    module_system_init();
+    codegen_prepass_imports_and_funcs(gen, statements, count, 0);
+
+    /* Reset module tracking so codegen_import generates code during compilation */
+    module_system_init();
 
     /* Compile all statements (including function declarations, which emit
      * their bodies out-of-line and jump around them at top level) */

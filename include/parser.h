@@ -4,6 +4,12 @@
 #include "ast.h"
 #include <setjmp.h>
 
+typedef struct {
+    Token current_tok;
+    Token previous_tok;
+    jmp_buf *repl_recovery_buf;
+} ParserState;
+
 // Parses an entire program (already-lexed via lexer_init) into a
 // list of top-level statements (typically function declarations).
 // Calls lexer_next_token() internally as needed.
@@ -11,5 +17,8 @@ StmtList parse_program(void);
 
 // Set or clear REPL mode jmp_buf for error recovery without exiting
 void parser_set_repl_mode(jmp_buf *buf);
+
+ParserState parser_get_state(void);
+void parser_set_state(ParserState state);
 
 #endif

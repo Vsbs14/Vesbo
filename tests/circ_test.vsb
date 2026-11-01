@@ -1,0 +1,6 @@
+import "circ_a.vsb"
+
+fnc main()
+    var res is ping(4)
+    output res
+    output "circular import success"

@@ -1,0 +1,6 @@
+import math_mod
+
+fnc main()
+    var ans is add(100, 200)
+    output ans
+    output "bare import success"

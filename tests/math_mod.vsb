@@ -1,0 +1,10 @@
+global var MOD_NAME is "math_mod"
+
+fnc add(a, b)
+    return a + b
+
+fnc multiply(a, b)
+    return a * b
+
+fnc main()
+    output "math_mod standalone main"

@@ -13,6 +13,20 @@ void parser_set_repl_mode(jmp_buf *buf) {
     repl_recovery_buf = buf;
 }
 
+ParserState parser_get_state(void) {
+    ParserState s;
+    s.current_tok = current_tok;
+    s.previous_tok = previous_tok;
+    s.repl_recovery_buf = repl_recovery_buf;
+    return s;
+}
+
+void parser_set_state(ParserState state) {
+    current_tok = state.current_tok;
+    previous_tok = state.previous_tok;
+    repl_recovery_buf = state.repl_recovery_buf;
+}
+
 static void parser_advance(void) {
     previous_tok = current_tok;
     current_tok = lexer_next_token();
@@ -398,7 +412,29 @@ static Stmt *parse_try_catch(void) {
     return make_try_catch_stmt(try_body, error_tok.lexeme, catch_body, line);
 }
 
+static Stmt *parse_import(void) {
+    int line = current_tok.line;
+    consume(TOKEN_IMPORT, "expected 'import'");
+    char *path = NULL;
+    if (check(TOKEN_STRING)) {
+        Token tok = consume(TOKEN_STRING, "expected module path string");
+        size_t len = strlen(tok.lexeme);
+        path = malloc(len + 1);
+        if (path) strcpy(path, tok.lexeme);
+    } else if (check(TOKEN_IDENT)) {
+        Token tok = consume(TOKEN_IDENT, "expected module name");
+        size_t len = strlen(tok.lexeme);
+        path = malloc(len + 1);
+        if (path) strcpy(path, tok.lexeme);
+    } else {
+        error_at(&current_tok, "expected module name or file path after 'import'");
+        return NULL;
+    }
+    return make_import_stmt(path, line);
+}
+
 static Stmt *parse_statement(void) {
+    if (check(TOKEN_IMPORT)) return parse_import();
     if (check(TOKEN_VAR)) return parse_var_decl(0);
     if (check(TOKEN_SET)) return parse_set();
     if (check(TOKEN_IF)) return parse_if();
