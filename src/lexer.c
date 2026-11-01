@@ -183,6 +183,101 @@ static Token string_token(char quote) {
     return t;
 }
 
+static Token interpolated_string_token(char quote) {
+    int cap = 64;
+    int len = 0;
+    char *buf = malloc(cap);
+    if (!buf) {
+        Token t = {TOKEN_ERROR, NULL, 0, lexer.line};
+        return t;
+    }
+
+    int brace_depth = 0;
+
+    while (!is_at_end()) {
+        char c = peek();
+        if (c == '\n') lexer.line++;
+
+        if (brace_depth == 0 && c == quote) {
+            advance(); // consume closing quote
+            break;
+        }
+
+        advance();
+
+        if (brace_depth == 0) {
+            if (c == '\\' && !is_at_end()) {
+                if (len + 2 >= cap) { cap *= 2; buf = realloc(buf, cap); }
+                buf[len++] = c;
+                buf[len++] = advance();
+                continue;
+            } else if (c == '{') {
+                if (peek() == '{') {
+                    // Escaped brace '{{'
+                    if (len + 2 >= cap) { cap *= 2; buf = realloc(buf, cap); }
+                    buf[len++] = '{';
+                    buf[len++] = advance();
+                    continue;
+                } else {
+                    brace_depth = 1;
+                }
+            } else if (c == '}') {
+                if (peek() == '}') {
+                    // Escaped brace '}}'
+                    if (len + 2 >= cap) { cap *= 2; buf = realloc(buf, cap); }
+                    buf[len++] = '}';
+                    buf[len++] = advance();
+                    continue;
+                }
+            }
+        } else {
+            // Inside an expression { ... }
+            if (c == '"' || c == '\'' || c == '#') {
+                char inner_quote = c;
+                if (len + 1 >= cap) { cap *= 2; buf = realloc(buf, cap); }
+                buf[len++] = c;
+                while (!is_at_end() && peek() != inner_quote) {
+                    if (peek() == '\n') lexer.line++;
+                    char ic = advance();
+                    if (ic == '\\' && !is_at_end()) {
+                        if (len + 2 >= cap) { cap *= 2; buf = realloc(buf, cap); }
+                        buf[len++] = ic;
+                        buf[len++] = advance();
+                    } else {
+                        if (len + 1 >= cap) { cap *= 2; buf = realloc(buf, cap); }
+                        buf[len++] = ic;
+                    }
+                }
+                if (!is_at_end()) {
+                    if (len + 1 >= cap) { cap *= 2; buf = realloc(buf, cap); }
+                    buf[len++] = advance(); // consume inner_quote
+                }
+                continue;
+            } else if (c == '{') {
+                brace_depth++;
+            } else if (c == '}') {
+                brace_depth--;
+            }
+        }
+
+        if (len + 1 >= cap) {
+            cap *= 2;
+            buf = realloc(buf, cap);
+        }
+        buf[len++] = c;
+    }
+
+    buf[len] = '\0';
+
+    Token t;
+    t.type = TOKEN_INTERPOLATED_STRING;
+    t.line = lexer.line;
+    t.lexeme = buf;
+    t.number_val = 0;
+    track_token_string(t.lexeme);
+    return t;
+}
+
 static Token number_token() {
     while (isdigit(peek())) advance();
     if (peek() == '.' && isdigit(lexer.source[lexer.current + 1])) {
@@ -361,6 +456,12 @@ Token lexer_next_token() {
     }
 
     if (isdigit(c)) return number_token();
+    if (c == '$' && (peek() == '"' || peek() == '\'' || peek() == '#')) {
+        return interpolated_string_token(advance());
+    }
+    if ((c == 'f' || c == 'F') && (peek() == '"' || peek() == '\'' || peek() == '#')) {
+        return interpolated_string_token(advance());
+    }
     if (isalpha(c) || c == '_') return identifier_or_keyword_token();
     if (c == '#' || c == '"' || c == '\'') return string_token(c);
 
