@@ -70,6 +70,15 @@ Value make_array_value(void) {
     return v;
 }
 
+Value make_map_value(void) {
+    Value v;
+    v.type = VAL_MAP;
+    v.as.map = malloc(sizeof(ValueMap));
+    track_allocation(v.as.map);
+    value_map_init(v.as.map);
+    return v;
+}
+
 void value_array_init(ValueArray *arr) {
     arr->items = NULL;
     arr->count = 0;
@@ -84,6 +93,60 @@ void value_array_push(ValueArray *arr, Value v) {
     arr->items[arr->count++] = v;
 }
 
+void value_map_init(ValueMap *map) {
+    map->entries = NULL;
+    map->count = 0;
+    map->capacity = 0;
+}
+
+int value_map_set(ValueMap *map, const char *key, Value v) {
+    for (int i = 0; i < map->count; i++) {
+        if (strcmp(map->entries[i].key, key) == 0) {
+            map->entries[i].value = v;
+            return 1;
+        }
+    }
+    if (map->count >= map->capacity) {
+        map->capacity = map->capacity == 0 ? 8 : map->capacity * 2;
+        map->entries = tracked_realloc(map->entries, sizeof(ValueMapEntry) * map->capacity);
+    }
+    char *kcopy = copy_string(key);
+    track_allocation(kcopy);
+    map->entries[map->count].key = kcopy;
+    map->entries[map->count].value = v;
+    map->count++;
+    return 1;
+}
+
+int value_map_get(ValueMap *map, const char *key, Value *out) {
+    if (!map) return 0;
+    for (int i = 0; i < map->count; i++) {
+        if (strcmp(map->entries[i].key, key) == 0) {
+            if (out) *out = map->entries[i].value;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int value_map_has(ValueMap *map, const char *key) {
+    return value_map_get(map, key, NULL);
+}
+
+int value_map_remove(ValueMap *map, const char *key) {
+    if (!map) return 0;
+    for (int i = 0; i < map->count; i++) {
+        if (strcmp(map->entries[i].key, key) == 0) {
+            for (int j = i; j < map->count - 1; j++) {
+                map->entries[j] = map->entries[j + 1];
+            }
+            map->count--;
+            return 1;
+        }
+    }
+    return 0;
+}
+
 int value_is_truthy(Value v) {
     switch (v.type) {
         case VAL_BOOL:   return v.as.boolean;
@@ -91,6 +154,7 @@ int value_is_truthy(Value v) {
         case VAL_NUMBER: return v.as.number != 0;
         case VAL_STRING: return v.as.string[0] != '\0';
         case VAL_ARRAY:  return v.as.array.count > 0;
+        case VAL_MAP:    return v.as.map && v.as.map->count > 0;
     }
     return 0;
 }
@@ -112,6 +176,17 @@ int values_equal(Value a, Value b) {
                 if (!values_equal(a.as.array.items[i], b.as.array.items[i])) return 0;
             }
             return 1;
+        case VAL_MAP: {
+            if (a.as.map == b.as.map) return 1;
+            if (!a.as.map || !b.as.map) return 0;
+            if (a.as.map->count != b.as.map->count) return 0;
+            for (int i = 0; i < a.as.map->count; i++) {
+                Value b_val;
+                if (!value_map_get(b.as.map, a.as.map->entries[i].key, &b_val)) return 0;
+                if (!values_equal(a.as.map->entries[i].value, b_val)) return 0;
+            }
+            return 1;
+        }
     }
     return 0;
 }
@@ -122,6 +197,7 @@ const char *value_type_name(Value v) {
         case VAL_STRING: return "string";
         case VAL_BOOL:   return "boolean";
         case VAL_ARRAY:  return "array";
+        case VAL_MAP:    return "map";
         case VAL_NONE:   return "none";
     }
     return "unknown";
@@ -169,6 +245,37 @@ char *value_to_display_string(Value v) {
             APPEND("]");
 
             #undef APPEND
+            return out;
+        }
+        case VAL_MAP: {
+            // Build "{"key": val, ...}"
+            size_t cap = 256;
+            char *out = malloc(cap);
+            size_t len = 0;
+            out[0] = '\0';
+
+            #define APPEND_MAP(str) do { \
+                size_t slen = strlen(str); \
+                while (len + slen + 1 > cap) { cap *= 2; out = realloc(out, cap); } \
+                memcpy(out + len, str, slen + 1); \
+                len += slen; \
+            } while (0)
+
+            APPEND_MAP("{");
+            if (v.as.map) {
+                for (int i = 0; i < v.as.map->count; i++) {
+                    if (i > 0) APPEND_MAP(", ");
+                    APPEND_MAP("\"");
+                    APPEND_MAP(v.as.map->entries[i].key);
+                    APPEND_MAP("\": ");
+                    char *item_str = value_to_display_string(v.as.map->entries[i].value);
+                    APPEND_MAP(item_str);
+                    free(item_str);
+                }
+            }
+            APPEND_MAP("}");
+
+            #undef APPEND_MAP
             return out;
         }
     }

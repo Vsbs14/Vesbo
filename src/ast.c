@@ -97,6 +97,28 @@ Expr *make_array_expr(ExprList elements, int line) {
     return e;
 }
 
+Expr *make_map_expr(MapEntryList entries, int line) {
+    Expr *e = alloc_expr(EXPR_MAP, line);
+    e->as.map.entries = entries;
+    return e;
+}
+
+void map_entry_list_init(MapEntryList *list) {
+    list->items = NULL;
+    list->count = 0;
+    list->capacity = 0;
+}
+
+void map_entry_list_add(MapEntryList *list, Expr *key, Expr *value) {
+    if (list->count >= list->capacity) {
+        list->capacity = list->capacity == 0 ? 8 : list->capacity * 2;
+        list->items = realloc(list->items, list->capacity * sizeof(MapEntryExpr));
+    }
+    list->items[list->count].key = key;
+    list->items[list->count].value = value;
+    list->count++;
+}
+
 Expr *make_index_expr(Expr *collection, Expr *index, int line) {
     Expr *e = alloc_expr(EXPR_INDEX, line);
     e->as.index_expr.collection = collection;
@@ -147,6 +169,14 @@ Stmt *make_assign_stmt(const char *name, Expr *value, int line) {
     Stmt *s = alloc_stmt(STMT_ASSIGN, line);
     s->as.assign.name = copy_string(name);
     s->as.assign.value = value;
+    return s;
+}
+
+Stmt *make_index_set_stmt(const char *name, Expr *index, Expr *value, int line) {
+    Stmt *s = alloc_stmt(STMT_INDEX_SET, line);
+    s->as.index_set.name = copy_string(name);
+    s->as.index_set.index = index;
+    s->as.index_set.value = value;
     return s;
 }
 
@@ -234,6 +264,13 @@ void free_expr(Expr *expr) {
                 free_expr(expr->as.array.elements.items[i]);
             free(expr->as.array.elements.items);
             break;
+        case EXPR_MAP:
+            for (int i = 0; i < expr->as.map.entries.count; i++) {
+                free_expr(expr->as.map.entries.items[i].key);
+                free_expr(expr->as.map.entries.items[i].value);
+            }
+            free(expr->as.map.entries.items);
+            break;
         case EXPR_INDEX:
             free_expr(expr->as.index_expr.collection);
             free_expr(expr->as.index_expr.index);
@@ -277,6 +314,11 @@ void free_stmt(Stmt *stmt) {
         case STMT_ASSIGN:
             free(stmt->as.assign.name);
             free_expr(stmt->as.assign.value);
+            break;
+        case STMT_INDEX_SET:
+            free(stmt->as.index_set.name);
+            free_expr(stmt->as.index_set.index);
+            free_expr(stmt->as.index_set.value);
             break;
         case STMT_IF:
             free_expr(stmt->as.if_stmt.condition);

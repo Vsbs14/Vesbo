@@ -347,6 +347,9 @@ Token lexer_next_token() {
         case ']': return make_token(TOKEN_RBRACKET);
         case ',': return make_token(TOKEN_COMMA);
         case '+': return make_token(TOKEN_PLUS);
+        case '{': return make_token(TOKEN_LBRACE);
+        case '}': return make_token(TOKEN_RBRACE);
+        case ':': return make_token(TOKEN_COLON);
         case '-': return make_token(TOKEN_MINUS);
         case '*': return make_token(TOKEN_STAR);
         case '/': return make_token(TOKEN_SLASH);

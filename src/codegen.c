@@ -129,6 +129,16 @@ static void codegen_expr(CodeGen *gen, Expr *expr) {
             break;
         }
 
+        case EXPR_MAP: {
+            for (int i = 0; i < expr->as.map.entries.count; i++) {
+                codegen_expr(gen, expr->as.map.entries.items[i].key);
+                codegen_expr(gen, expr->as.map.entries.items[i].value);
+            }
+            chunk_write_op(gen->chunk, OP_BUILD_MAP);
+            chunk_write_operand(gen->chunk, (uint32_t)expr->as.map.entries.count);
+            break;
+        }
+
         case EXPR_INDEX:
             codegen_expr(gen, expr->as.index_expr.collection);
             codegen_expr(gen, expr->as.index_expr.index);
@@ -245,6 +255,21 @@ static void codegen_stmt(CodeGen *gen, Stmt *stmt) {
                 chunk_write_operand(gen->chunk, (uint32_t)chunk_add_string(gen->chunk, stmt->as.assign.name));
                 chunk_write_op(gen->chunk, OP_POP);
             }
+            break;
+        }
+
+        case STMT_INDEX_SET: {
+            int idx = local_vars_find(&gen->locals, stmt->as.index_set.name);
+            if (idx >= 0) {
+                chunk_write_op(gen->chunk, OP_GET_LOCAL);
+                chunk_write_operand(gen->chunk, (uint32_t)idx);
+            } else {
+                chunk_write_op(gen->chunk, OP_GET_GLOBAL);
+                chunk_write_operand(gen->chunk, (uint32_t)chunk_add_string(gen->chunk, stmt->as.index_set.name));
+            }
+            codegen_expr(gen, stmt->as.index_set.index);
+            codegen_expr(gen, stmt->as.index_set.value);
+            chunk_write_op(gen->chunk, OP_INDEX_SET);
             break;
         }
 

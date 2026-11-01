@@ -10,6 +10,7 @@ typedef enum {
     EXPR_NONE,
     EXPR_IDENT,
     EXPR_ARRAY,
+    EXPR_MAP,
     EXPR_INDEX,       // arr[i]
     EXPR_BINARY,      // a + b, a equals b, a AND b, etc.
     EXPR_UNARY,       // NOT x, -x
@@ -19,6 +20,7 @@ typedef enum {
 typedef enum {
     STMT_VAR_DECL,
     STMT_ASSIGN,
+    STMT_INDEX_SET,    // set arr[i] to val / set map[k] to val
     STMT_IF,
     STMT_LOOP_TILL,
     STMT_LOOP_WHILE,
@@ -59,6 +61,17 @@ typedef struct {
 } ExprList;
 
 typedef struct {
+    Expr *key;
+    Expr *value;
+} MapEntryExpr;
+
+typedef struct {
+    MapEntryExpr *items;
+    int count;
+    int capacity;
+} MapEntryList;
+
+typedef struct {
     char **items;
     int count;
     int capacity;
@@ -75,6 +88,7 @@ struct Expr {
         char *ident_name;
 
         struct { ExprList elements; } array;
+        struct { MapEntryList entries; } map;
 
         struct { Expr *collection; Expr *index; } index_expr;
 
@@ -93,6 +107,8 @@ struct Stmt {
         struct { char *name; Expr *value; int is_global; } var_decl;
 
         struct { char *name; Expr *value; } assign;
+
+        struct { char *name; Expr *index; Expr *value; } index_set;
 
         struct {
             Expr *condition;
@@ -143,6 +159,7 @@ Expr *make_bool_expr(int val, int line);
 Expr *make_none_expr(int line);
 Expr *make_ident_expr(const char *name, int line);
 Expr *make_array_expr(ExprList elements, int line);
+Expr *make_map_expr(MapEntryList entries, int line);
 Expr *make_index_expr(Expr *collection, Expr *index, int line);
 Expr *make_binary_expr(BinOp op, Expr *left, Expr *right, int line);
 Expr *make_unary_expr(UnOp op, Expr *operand, int line);
@@ -150,6 +167,7 @@ Expr *make_call_expr(const char *callee_name, ExprList args, int line);
 
 Stmt *make_var_decl_stmt(const char *name, Expr *value, int is_global, int line);
 Stmt *make_assign_stmt(const char *name, Expr *value, int line);
+Stmt *make_index_set_stmt(const char *name, Expr *index, Expr *value, int line);
 Stmt *make_if_stmt(Expr *condition, StmtList then_branch, StmtList else_branch, int has_else, int line);
 Stmt *make_loop_till_stmt(Expr *condition, StmtList body, int line);
 Stmt *make_loop_while_stmt(Expr *condition, StmtList body, int line);
@@ -166,6 +184,9 @@ void stmt_list_add(StmtList *list, Stmt *stmt);
 
 void expr_list_init(ExprList *list);
 void expr_list_add(ExprList *list, Expr *expr);
+
+void map_entry_list_init(MapEntryList *list);
+void map_entry_list_add(MapEntryList *list, Expr *key, Expr *value);
 
 void string_list_init(StringList *list);
 void string_list_add(StringList *list, const char *str);
