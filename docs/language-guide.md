@@ -20,7 +20,7 @@ var user is { "name": "Alice", "age": 30 }
 var missing is none
 ```
 
-### Assignment Syntax
+### Assignment & Compound Operators
 
 Variables, array elements, map entries, and struct fields can be declared and reassigned using either English phrasing (`is`, `set ... to ...`) or `=`:
 
@@ -30,6 +30,25 @@ set score to score + 5
 score = score + 5
 
 global var high_score is 100
+```
+
+Vesbo supports compound assignment operators (`+=`, `-=`, `*=`, `/=`) across variables, struct fields, array indices, and map keys:
+
+```vsb
+var total is 100
+total += 25          -- 125
+total -= 15          -- 110
+total *= 2           -- 220
+total /= 10          -- 22
+
+-- Field, array element, and map key mutations
+player.hp -= 15
+scores["alice"] += 50
+coords[0] += 10
+
+-- String concatenation via +=
+var msg is "Hello"
+msg += " World"
 ```
 
 ### Reference Semantics & `copy()`
@@ -89,15 +108,27 @@ Comparison and logical operators can be written in English phrases or symbols:
 | Greater than | `is greater than` | `>` |
 | Less or equal | `is less than or equal` (`to`) | `<=` |
 | Greater or equal | `is greater than or equal` (`to`) | `>=` |
-| Logical AND | `AND` / `and` | — |
-| Logical OR | `OR` / `or` | — |
+| Logical AND | `AND` / `and` | &mdash; |
+| Logical OR | `OR` / `or` | &mdash; |
 | Logical NOT | `NOT` / `not` | `!` |
 
 Arithmetic follows standard precedence (`+`, `-`, `*`, `/`, `%`) and can be grouped with parentheses `(...)`.
 
+### Short-Circuit Evaluation
+
+Logical `and` and `or` operators perform short-circuit evaluation in both the interpreter and bytecode VM. If the left operand determines the truthiness of the condition, the right operand is not evaluated:
+
+```vsb
+-- The second condition is never evaluated if a is none
+if a != none and a[0] == 10
+	output "found 10"
+```
+
 ---
 
-## Loops
+## Loops & Control Flow
+
+Vesbo provides four structured loop forms:
 
 ```vsb
 -- While loop (runs while condition is true)
@@ -117,11 +148,31 @@ loop through values as value
 	output value
 ```
 
+### Loop Control: `break` and `continue`
+
+All loops support `break` to exit the loop immediately and `continue` to jump to the next iteration:
+
+```vsb
+-- break terminates the loop
+loop from 1 to 10 as i
+	if i > 5
+		break
+	output i
+
+-- continue advances to the next iteration
+loop through items as item
+	if item == "skip"
+		continue
+	output item
+```
+
+`break` and `continue` work safely inside nested `try` / `catch` blocks without leaking exception handlers or corrupting loop scopes.
+
 ---
 
 ## Functions
 
-Functions are declared with `fnc` (or `ft` for backwards compatibility). If a program defines `fnc main()`, it is automatically called after top-level initialization.
+Functions are declared with `fnc` (or `ft` for backwards compatibility). If a program defines `fnc main()`, it is automatically called after top-level initialization:
 
 ```vsb
 fnc add(a, b) gives number
@@ -145,8 +196,8 @@ struct Vec2
 	var y is 0
 
 	fnc move_by(dx, dy)
-		self.x = self.x + dx
-		self.y = self.y + dy
+		self.x += dx
+		self.y += dy
 		return self
 
 	fnc len_sq()
@@ -172,7 +223,7 @@ fnc main()
 
 ---
 
-## Arrays & Maps
+## Arrays, Maps & Slicing
 
 ### Arrays
 
@@ -200,6 +251,25 @@ user["city"] = "New York"
 
 loop through keys(user) as k
 	output $"{k}: {user[k]}"
+```
+
+### Slicing (`slice` & `substring`)
+
+Use the built-in `slice()` function to slice strings or arrays, with support for negative indices (counting backwards from the end):
+
+```vsb
+-- Array slicing: slice(arr, start, [end])
+var nums is [10, 20, 30, 40, 50]
+var mid is slice(nums, 1, 4)        -- [20, 30, 40]
+var last_two is slice(nums, -2)     -- [40, 50]
+
+-- String slicing: slice(str, start, [end])
+var str is "abcdef"
+output slice(str, 1, 4)             -- "bcd"
+output slice(str, -3)               -- "def"
+
+-- Substring: substring(str, start, [length])
+output substring(str, 0, 3)         -- "abc"
 ```
 
 ---

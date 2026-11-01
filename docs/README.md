@@ -2,7 +2,7 @@
 
 Vesbo is an indentation-based scripting language written from scratch in C99. Code can run directly through a tree-walking interpreter, execute in-memory on a stack-based bytecode virtual machine (`--vm`), or compile down to standalone `.vbo` (`VSB2`) bytecode files (`-c`).
 
-It includes user-defined structs and methods, stackful coroutines (`coroutine`, `yield`, `resume`), a mark-sweep garbage collector with reference semantics, and a static C library (`libvesbo`) for embedding the VM in C/C++ applications.
+It includes user-defined structs and methods, stackful coroutines (`coroutine`, `yield`, `resume`), loop control (`break`, `continue`), compound assignment (`+=`, `-=`, `*=`, `/=`), sequence slicing, a mark-sweep garbage collector with reference semantics, and a static C library (`libvesbo`) for embedding the VM in C/C++ applications.
 
 ## Quick Start
 
@@ -14,6 +14,7 @@ It includes user-defined structs and methods, stackful coroutines (`coroutine`, 
 | Run script (bytecode VM) | `vesbo.exe --vm script.vsb` | `./vesbo --vm script.vsb` |
 | Compile to `.vbo` bytecode | `vesbo.exe -c script.vsb -o out.vbo` | `./vesbo -c script.vsb -o out.vbo` |
 | Run compiled `.vbo` | `vesbo.exe out.vbo` | `./vesbo out.vbo` |
+| Inline eval (`-e`) | `vesbo.exe -e "output 'hello'"` | `./vesbo -e 'output "hello"'` |
 | Interactive REPL | `vesbo.exe` | `./vesbo` |
 | Disassemble bytecode | `vesbo.exe -d script.vsb` | `./vesbo -d script.vsb` |
 | Run with VM profiler | `vesbo.exe --profile --vm script.vsb` | `./vesbo --profile --vm script.vsb` |
@@ -63,8 +64,8 @@ HELLO WORLD
 
 ## Sections
 
-- [Syntax & Types](language-guide.md) — Variables, reference semantics (`copy()`), strings, control flow, functions, structs, arrays, maps, `import`, and `try`/`catch`.
-- [Coroutines](coroutines.md) — Stackful coroutines (`coroutine`, `yield`, `resume`) and cooperative multitasking patterns.
-- [Standard Library](stdlib.md) — Built-in runtime functions and `std/math`, `std/strings`, and `std/lists`.
-- [C Embedding & VM](embedding.md) — Embedding `libvesbo` (`include/vesbo.h`) in C/C++ applications and `VSB2` bytecode format.
-- [Heap & Mark-Sweep GC](gc_design.md) — `Obj` header layout, string interning, and garbage collector design.
+- [Syntax & Types](language-guide.md) &mdash; Variables, reference semantics (`copy()`), strings, control flow (`break`/`continue`), compound assignment, functions, structs, arrays, maps, slicing, `import`, and `try`/`catch`.
+- [Coroutines](coroutines.md) &mdash; Stackful coroutines (`coroutine`, `yield`, `resume`) and cooperative multitasking patterns.
+- [Standard Library](stdlib.md) &mdash; Built-in runtime functions and `std/math`, `std/strings`, and `std/lists`.
+- [C Embedding & VM](embedding.md) &mdash; Embedding `libvesbo` (`include/vesbo.h`) in C/C++ applications and `VSB2` bytecode format.
+- [Heap & Mark-Sweep GC](gc_design.md) &mdash; `Obj` header layout, string interning, and garbage collector design.

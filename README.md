@@ -1,8 +1,8 @@
 # Vesbo
 
-Vesbo is an indentation-based scripting language written from scratch in C99. It includes a lexer, recursive-descent parser, tree-walking interpreter, bytecode compiler, stack-based virtual machine, mark-sweep garbage collector, and a C embedding API (`libvesbo`).
+Vesbo is an indentation-based scripting language written from scratch in C99. It includes a lexer, recursive-descent parser, tree-walking interpreter, bytecode compiler, stack-based virtual machine, mark-sweep garbage collector, stackful coroutines, user-defined structs, and a C embedding API (`libvesbo`).
 
-**[Documentation (vsbs14.github.io/Vesbo) →](https://vsbs14.github.io/Vesbo/)**
+**[Documentation (vsbs14.github.io/Vesbo) &rarr;](https://vsbs14.github.io/Vesbo/)**
 
 ## Example
 
@@ -12,8 +12,8 @@ struct Vec2
 	var y is 0
 
 	fnc move_by(dx, dy)
-		self.x = self.x + dx
-		self.y = self.y + dy
+		self.x += dx
+		self.y += dy
 		return self
 
 fnc counter_task(pos, step)
@@ -40,6 +40,7 @@ fnc main()
 | Run script (bytecode VM) | `vesbo.exe --vm script.vsb` | `./vesbo --vm script.vsb` |
 | Compile to `.vbo` bytecode | `vesbo.exe -c script.vsb -o out.vbo` | `./vesbo -c script.vsb -o out.vbo` |
 | Run compiled `.vbo` | `vesbo.exe out.vbo` | `./vesbo out.vbo` |
+| Inline eval (`-e`) | `vesbo.exe -e "output 'hello'"` | `./vesbo -e 'output "hello"'` |
 | Interactive REPL | `vesbo.exe` | `./vesbo` |
 | Disassemble bytecode | `vesbo.exe -d script.vsb` | `./vesbo -d script.vsb` |
 
@@ -52,12 +53,12 @@ fnc main()
 
 The full language and runtime reference is hosted at **[vsbs14.github.io/Vesbo](https://vsbs14.github.io/Vesbo/)** and lives in [`docs/`](docs/):
 
-- [Getting Started & CLI Reference](docs/README.md) — CLI flags (`--vm`, `-c`, `-d`, `--profile`, `--gc-stress`) and REPL usage.
-- [Language Guide](docs/language-guide.md) — Variables, reference semantics (`copy()`), strings, control flow, functions, structs & methods (`self`), arrays, maps, `import`, and `try`/`catch`.
-- [Coroutines](docs/coroutines.md) — Stackful coroutines (`coroutine`, `yield`, `resume`) and cooperative multitasking.
-- [Standard Library & Built-ins](docs/stdlib.md) — Built-in runtime functions and `std/math`, `std/strings`, and `std/lists`.
-- [C Embedding (`libvesbo`) & VM](docs/embedding.md) — Embedding `VesboVM` in C/C++ applications (`include/vesbo.h`) and `VSB2` bytecode layout.
-- [Heap & Mark-Sweep GC Design](docs/gc_design.md) — `Obj` representation, string interning, and garbage collection.
+- [Getting Started & CLI Reference](docs/README.md) &mdash; CLI flags (`--vm`, `-c`, `-d`, `-e`, `--profile`, `--gc-stress`) and REPL usage.
+- [Language Guide](docs/language-guide.md) &mdash; Variables, reference semantics (`copy()`), strings, control flow (`break`/`continue`), compound assignment, structs & methods, arrays, maps, slicing, modules, and `try`/`catch`.
+- [Coroutines](docs/coroutines.md) &mdash; Stackful coroutines (`coroutine`, `yield`, `resume`) and cooperative multitasking.
+- [Standard Library & Built-ins](docs/stdlib.md) &mdash; Built-in runtime functions and `std/math`, `std/strings`, and `std/lists`.
+- [C Embedding (`libvesbo`) & VM](docs/embedding.md) &mdash; Embedding `VesboVM` in C/C++ applications (`include/vesbo.h`) and `VSB2` bytecode layout.
+- [Heap & Mark-Sweep GC Design](docs/gc_design.md) &mdash; `Obj` representation, string interning, and garbage collection.
 
 ## Directory Layout
 

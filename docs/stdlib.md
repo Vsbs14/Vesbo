@@ -30,6 +30,8 @@ Vesbo provides a rich set of built-in runtime functions in C (`src/builtins.c`) 
 | `replace(s, old, new)` | Replace all occurrences of `old` with `new` in `s`. |
 | `split(s, delim)` | Split `s` by `delim` into an array of strings. |
 | `join(arr, delim)` | Join array elements into a single string separated by `delim`. |
+| `slice(s, start, [end])` | Extract a substring from `start` up to `end` (supports negative indices). |
+| `substring(s, start, [length])` | Extract up to `length` characters starting from index `start`. |
 
 ### Array & Map Operations
 
@@ -39,6 +41,7 @@ Vesbo provides a rich set of built-in runtime functions in C (`src/builtins.c`) 
 | `push(arr, value)` | Append `value` to `arr` in place and return `arr`. |
 | `pop(arr)` | Remove and return the last element of `arr`. |
 | `contains(collection, item)` | Check if an array contains `item` or a map contains key `item`. |
+| `slice(arr, start, [end])` | Extract a sub-array from index `start` up to `end` (supports negative indices). |
 | `keys(map)` | Return an array of all keys in `map` in insertion order. |
 | `values(map)` | Return an array of all values in `map` in insertion order. |
 | `has_key(map, key)` | Return `true` if `key` exists in `map`. |
@@ -54,6 +57,7 @@ Vesbo provides a rich set of built-in runtime functions in C (`src/builtins.c`) 
 | `ceil(x)` | Smallest integer greater than or equal to `x`. |
 | `min(a, b)` | Smaller of `a` and `b`. |
 | `max(a, b)` | Larger of `a` and `b`. |
+| `sign(x)` | Sign of `x` (`1` if positive, `-1` if negative, `0` if zero). |
 
 ### File, System & Time Operations
 
@@ -89,6 +93,7 @@ import "std/math"
 output PI                  -- 3.14159265358979
 output E                   -- 2.71828182845905
 output clamp(150, 0, 100)  -- 100
+output sign(-42)           -- -1
 output pow(2, 8)           -- 256
 output factorial(5)        -- 120
 output gcd(54, 24)         -- 6
@@ -102,11 +107,12 @@ output is_odd(10)          -- false
 ```vsb
 import "std/strings"
 
-output starts_with("vesbo-lang", "vesbo")  -- true
-output ends_with("main.vsb", ".vsb")       -- true
-output repeat("=", 10)                     -- "=========="
+output starts_with("vesbo.exe", "ves")    -- true
+output ends_with("image.png", ".png")      -- true
+output repeat("*-", 4)                     -- "*-*-*-*-"
 output pad_left("42", 5, "0")              -- "00042"
-output pad_right("hi", 5, " ")             -- "hi   "
+output pad_right("hello", 8, "!")          -- "hello!!!"
+output contains_char("vesbo", "b")         -- true
 ```
 
 ### `std/lists`
@@ -114,13 +120,13 @@ output pad_right("hi", 5, " ")             -- "hi   "
 ```vsb
 import "std/lists"
 
-var nums is [10, 20, 30, 40]
-output sum(nums)                   -- 100
-output average(nums)               -- 25
-output min_item(nums)              -- 10
-output max_item(nums)              -- 40
-output reverse(nums)               -- [40, 30, 20, 10]
-output slice(nums, 1, 3)           -- [20, 30]
-output index_of(nums, 30)          -- 2
-output count_occurrences(nums, 20) -- 1
+var nums is [1, 2, 3, 4, 5]
+output reverse(nums)                       -- [5, 4, 3, 2, 1]
+output index_of(nums, 3)                   -- 2
+output sum(nums)                           -- 15
+output average(nums)                       -- 3
+output min_item(nums)                      -- 1
+output max_item(nums)                      -- 5
+output concat([1, 2], [3, 4])              -- [1, 2, 3, 4]
+output count_occurrences([1, 2, 1, 3], 1)  -- 2
 ```

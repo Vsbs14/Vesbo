@@ -1,4 +1,4 @@
-# Vesbo Heap Object Model & Garbage Collector Design (L1)
+# Vesbo Heap Object Model & Garbage Collector Design
 
 ## 1. Overview
 Vesbo uses a unified heap object representation (`Obj`) managed by a deterministic, stop-the-world **Mark-Sweep Garbage Collector**. Strings are immutable and interned globally, while composite types (**arrays**, **maps**, **struct instances**, and **coroutines**) use **reference semantics** with an explicit `copy()` built-in for shallow cloning.
