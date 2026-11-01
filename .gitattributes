@@ -1,0 +1,8 @@
+* text=auto
+*.sh text eol=lf
+Makefile text eol=lf
+*.bat text eol=crlf
+*.vbo binary
+*.dll binary
+*.lib binary
+*.exe binary
