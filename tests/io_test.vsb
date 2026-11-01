@@ -1,0 +1,41 @@
+fnc main()
+    var fname is "test_io_temp.txt"
+
+    -- Ensure cleaned up
+    if file_exists(fname)
+        remove_file(fname)
+
+    output file_exists(fname)
+
+    -- Write file
+    var w_res is write_file(fname, "Hello Vesbo I/O!")
+    output w_res
+    output file_exists(fname)
+
+    -- Read file
+    var content is read_file(fname)
+    output content
+
+    -- Append file
+    var a_res is append_file(fname, " Extra content.")
+    output a_res
+    output read_file(fname)
+
+    -- Remove file
+    var r_res is remove_file(fname)
+    output r_res
+    output file_exists(fname)
+
+    -- Clock & Time
+    var t is time()
+    output t > 1000000
+
+    var c is clock()
+    output c >= 0
+
+    -- Environment variables
+    var p is env("PATH")
+    output p != none
+
+    var bogus is env("NON_EXISTENT_VAR_VESBO_12345")
+    output bogus
